@@ -71,13 +71,38 @@ RSS_FEEDS = [
     "https://freelance.ru/rss/feed/list.rss"
 ]
 
-SENT_PROJECTS = set() 
-
 KEYWORDS = [
     "ai", "ии", "нейросеть", "дизайн", "лого", "логотип", "графика", 
     "иллюстрация", "рисунок", "midjourney", "flux", "stable diffusion",
     "видео", "video", "prompt", "бот", "bot", "агент", "agent"
 ]
+
+SENT_PROJECTS = set() 
+
+def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
+    """Специальный модуль для HeadHunter через API"""
+    try:
+        url = f"https://api.hh.ru/vacancies?text={query}&area=1&per_page={limit}"
+        headers = {'User-Agent': 'DrSurfHunter/1.0 (victoria@example.com)'}
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            vacs = []
+            for item in data.get('items', []):
+                salary = "По договоренности"
+                if item.get('salary'):
+                    s = item['salary']
+                    salary = f"от {s.get('from')} {s.get('currency')}"
+                vacs.append({
+                    "title": item['name'],
+                    "url": item['alternate_url'],
+                    "price": salary,
+                    "site": "💼 HeadHunter",
+                    "offer": OFFER_TEMPLATES["ai_agent"].format(bot_url=MAIN_BOT_URL)
+                })
+            return vacs
+    except: pass
+    return []
 
 def extract_price(entry):
     match = re.search(r"(\d[\d\s]*\d\s?(?:руб|₽|\$|USD|евро|€))", entry.title, re.IGNORECASE)
@@ -95,6 +120,7 @@ def get_best_template(title):
 
 def fetch_orders(ignore_history=False):
     found = []
+    # 1. Сбор с RSS
     for url in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
@@ -112,6 +138,14 @@ def fetch_orders(ignore_history=False):
                         })
                         if not ignore_history: SENT_PROJECTS.add(entry.link)
         except: pass
+    
+    # 2. Сбор с HH.ru (добавляем к списку)
+    hh_results = fetch_hh_vacancies()
+    for v in hh_results:
+        if ignore_history or (v['url'] not in SENT_PROJECTS):
+            found.append(v)
+            if not ignore_history: SENT_PROJECTS.add(v['url'])
+            
     return found
 
 def send_to_group(text):
@@ -142,9 +176,9 @@ def welcome(message):
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
-    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ:**\n\n"
+    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (Включая HH):**\n\n"
     if projects:
-        for p in projects[:5]:
+        for p in projects[:10]: # Увеличил лимит до 10
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
     else:
         report += "🌊 Пока горизонт чист. Попробуй позже!\n"
@@ -172,7 +206,7 @@ def chat(message):
         
     except Exception as e:
         print(f"AI Error: {e}", flush=True)
-        bot.reply_to(message, "Ошибка AI. Проверьте GROQ_API_KEY.")
+        bot.reply_to(message, "Ошибка AI.")
 
 # --- ЗАПУСК ---
 
@@ -187,11 +221,9 @@ def run_bot():
             time.sleep(5)
 
 if __name__ == "__main__":
-    # 1. Фоновые потоки
     threading.Thread(target=run_bot, daemon=True).start()
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    # 2. Основной поток для Flask (чтобы Render считал сервис активным)
     print("[SYSTEM] Запуск Flask сервера на порту 10000...", flush=True)
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port
