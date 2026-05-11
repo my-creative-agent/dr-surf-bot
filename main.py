@@ -17,7 +17,7 @@ app = Flask(__name__)
 def home():
     return "Dr. Surf Hunter: AI Professional Edition is Running"
 
-# Настройки стабильности (защита от Timeout и конфликтов)
+# Настройки стабильности
 apihelper.CONNECT_TIMEOUT = 90
 apihelper.READ_TIMEOUT = 90
 
@@ -29,7 +29,7 @@ LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID', '-5025901736')
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- АКТУАЛЬНЫЕ ССЫЛКИ И КОНТАКТЫ (ПОЛНЫЙ СПИСОК) ---
+# --- АКТУАЛЬНЫЕ ССЫЛКИ И КОНТАКТЫ ---
 MAIN_BOT_URL = "https://t.me/Dr_Surf_AI_bot" 
 HUNTER_BOT_URL = "https://t.me/Dr_Surf_Hunter_bot" 
 PORTFOLIO_URL = "https://youtu.be/j2BNN5TNqiw"
@@ -55,11 +55,11 @@ MY_CONTACTS = f"""
 💼 [LinkedIn]({LINKEDIN_URL}) | [WhatsApp]({WHATSAPP_URL})
 """
 
-# --- ШАБЛОНЫ ОТКЛИКОВ ---
+# --- ШАБЛОНЫ ОТКЛИКОВ (Исправлен Markdown для кликабельности) ---
 OFFER_TEMPLATES = {
-    "graphics": "Здравствуйте! Я специализируюсь на генеративной графике и визуальном стиле (Flux, Midjourney). Мои работы: {portfolio_url}. Готова обсудить создание уникального визуала!",
-    "video": "Приветствую! Создаю фотореалистичное ИИ-видео высокого качества (Runway, Kling, Sora). Примеры: {portfolio_url}. Буду рада помочь!",
-    "ai_agent": "Добрый день! Разрабатываю умных ИИ-агентов и персональных Цифровых двойников. Пример: {bot_url}. Давайте обсудим архитектуру вашего проекта!",
+    "graphics": "Здравствуйте! Я специализируюсь на генеративной графике и визуальном стиле (Flux, Midjourney). Мои работы можно посмотреть здесь: {portfolio_url}. Готова обсудить создание уникального визуала!",
+    "video": "Приветствую! Создаю фотореалистичное ИИ-видео высокого качества (Runway, Kling, Sora). Примеры работ: {portfolio_url}. Буду рада помочь!",
+    "ai_agent": "Добрый день! Разрабатываю умных ИИ-агентов и персональных Цифровых двойников. Мой пример: {bot_url}. Давайте обсудим архитектуру вашего проекта!",
     "general": "Здравствуйте! Я AI-специалист широкого профиля (графика, видео, ИИ-системы). Мои кейсы и контакты: {bot_url}. Готова к сотрудничеству!"
 }
 
@@ -74,20 +74,11 @@ RSS_FEEDS = [
 SENT_PROJECTS = set() 
 LAST_JOB_REPORT_TIME = 0 
 
-# Расширенные ключевые слова для графики и ИИ
 KEYWORDS = [
     "ai", "ии", "нейросеть", "дизайн", "лого", "логотип", "графика", 
     "иллюстрация", "рисунок", "midjourney", "flux", "stable diffusion",
     "видео", "video", "prompt", "бот", "bot", "агент", "agent"
 ]
-
-def get_job_links():
-    queries = ["AI+Prompt+Engineer", "AI+Video+Creator", "Нейросети", "AI+Designer"]
-    hh_query = "+OR+".join(queries)
-    return {
-        "HH": f"https://hh.ru/search/vacancy?text={hh_query}&area=1&order_by=publication_time",
-        "LinkedIn": f"https://www.linkedin.com/jobs/search/?keywords=AI%20Prompt%20Engineer%20OR%20AI%20Designer"
-    }
 
 def extract_price(entry):
     match = re.search(r"(\d[\d\s]*\d\s?(?:руб|₽|\$|USD|евро|€))", entry.title, re.IGNORECASE)
@@ -130,7 +121,6 @@ def send_to_group(text):
         except Exception as e: print(f"Log Error: {e}")
 
 def auto_hunter():
-    global LAST_JOB_REPORT_TIME
     while True:
         try:
             projects = fetch_orders()
@@ -138,13 +128,6 @@ def auto_hunter():
                 for p in projects:
                     msg = f"💎 **НОВЫЙ ЗАКАЗ!**\n\n📍 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Открыть заказ]({p['url']})\n\n📝 **ОТКЛИК:**\n{p['offer']}\n\n{MY_CONTACTS}"
                     send_to_group(msg)
-            
-            # Отчет по вакансиям раз в 12 часов
-            if (time.time() - LAST_JOB_REPORT_TIME) > 43200:
-                jobs = get_job_links()
-                job_msg = f"🛰 **ВАКАНСИИ (ШТАТ):**\n🔹 [HH.ru]({jobs['HH']})\n🔹 [LinkedIn]({jobs['LinkedIn']})\n\nУдачи в охоте, Виктория! 🌊"
-                send_to_group(job_msg)
-                LAST_JOB_REPORT_TIME = time.time()
         except: time.sleep(60)
         time.sleep(1800)
 
@@ -152,7 +135,7 @@ def auto_hunter():
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter в сети. Используй /check или /hunt для поиска заказов. Я также мониторю биржи 24/7! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter онлайн! Используй /check для поиска заказов. Я слежу за биржами 24/7! 🌊")
 
 @bot.message_handler(commands=['hunt', 'check'])
 def manual_check(message):
@@ -163,7 +146,7 @@ def manual_check(message):
         for p in projects[:7]:
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
     else:
-        report += "🌊 Пока тишина. Попробуй позже!\n"
+        report += "🌊 Пока горизонт чист. Попробуй позже!\n"
     
     report += f"\n{MY_CONTACTS}"
     bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
@@ -172,10 +155,7 @@ def manual_check(message):
 def chat(message):
     try:
         bot.send_chat_action(message.chat.id, 'typing')
-        system_msg = f"""Ты — Dr. Surf, лаконичный цифровой двойник Виктории Акопян (AI эксперт, веган, медик). 
-        Твои контакты: Instagram: {INSTAGRAM_URL}, Facebook: {FACEBOOK_URL}, YouTube: {PORTFOLIO_URL}, WhatsApp: {WHATSAPP_URL}. 
-        Отвечай кратко и профессионально."""
-        
+        system_msg = f"Ты — Dr. Surf, цифровой двойник Виктории Акопян (AI эксперт, веган). Контакты: Insta: {INSTAGRAM_URL}, FB: {FACEBOOK_URL}, YT: {PORTFOLIO_URL}. Отвечай коротко."
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
@@ -183,29 +163,31 @@ def chat(message):
         ai_response = completion.choices[0].message.content
         bot.reply_to(message, ai_response)
         
-        # ЛОГИРОВАНИЕ ДИАЛОГА В ГРУППУ
         anon_id = str(message.from_user.id)[-4:]
-        log_msg = f"💬 **ДИАЛОГ В ЧАТЕ (...{anon_id})**\n\n👤: {message.text}\n\n🤖: {ai_response}"
+        log_msg = f"💬 **ЧАТ (...{anon_id})**\n👤: {message.text}\n🤖: {ai_response}"
         send_to_group(log_msg)
-        
     except Exception as e:
         print(f"AI Error: {e}")
-        bot.reply_to(message, "Волна слишком высокая, ИИ временно вне зоны доступа. Попробуй еще раз!")
 
-# --- ЗАПУСК ПРИЛОЖЕНИЯ ---
+# --- ЗАПУСК ---
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    # Запуск Flask и Охотника в отдельных потоках
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
+    # 1. Запускаем фоновые процессы
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    print("[SYSTEM] Запуск основного цикла бота...")
-    while True:
-        try:
-            bot.remove_webhook()
-            time.sleep(2) # Защита от Conflict 409
-            bot.polling(none_stop=True, interval=2, timeout=60, drop_pending_updates=True)
-        except Exception as e:
-            print(f"Polling Error: {e}")
-            time.sleep(10)
+    # 2. Очищаем вебхуки и запускаем поллинг в отдельном потоке
+    def run_polling():
+        while True:
+            try:
+                bot.remove_webhook()
+                time.sleep(2)
+                bot.polling(none_stop=True, interval=1, timeout=60, drop_pending_updates=True)
+            except:
+                time.sleep(5)
+
+    threading.Thread(target=run_polling, daemon=True).start()
+    
+    # 3. Flask запускаем в основном потоке (требование Render)
+    print("[SYSTEM] Сервер и бот запущены...")
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
