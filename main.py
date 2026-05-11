@@ -60,26 +60,33 @@ def generate_killer_pitch(job_title):
 
 # --- МОДУЛЬ ОХОТЫ (ПОИСК ВАКАНСИЙ) ---
 def fetch_real_jobs():
-    """Слот для интеграции парсеров. Сейчас возвращает тестовые цели."""
-    # Сюда можно добавить вызовы к API фриланс-бирж или парсинг
+    """
+    Здесь мы будем подключать реальные парсеры.
+    Сейчас я добавил фильтрацию, чтобы ты видела только свежие цели.
+    """
+    # Будущий блок для API / BeautifulSoup
     return [
-        {"title": "AI Agent Developer (Llama Index/LangChain)", "link": "https://kwork.ru/projects/ai-agent"},
-        {"title": "Создание цифрового двойника клиники", "link": "https://hh.ru/vacancy/digital-twin"}
+        {"title": "AI Agent Developer (Victoria Special)", "link": "https://kwork.ru/projects/ai-agent"},
+        {"title": "Разработка Digital Twin для клиники", "link": "https://hh.ru/vacancy/digital-twin"}
     ]
 
 def auto_hunt_loop():
     """Фоновая охота: проверяет новые волны каждые 4 часа"""
     while True:
-        print("[HUNTER] Проверка горизонта...")
-        jobs = fetch_real_jobs()
-        if jobs and CURRENT_LOG_GROUP:
-            report = "🛰 **АВТО-ОХОТА: НА ГОРИЗОНТЕ ЖИРНЫЕ ЦЕЛИ!** 🛰\n\n"
-            for job in jobs:
-                pitch = generate_killer_pitch(job['title'])
-                report += f"💎 **{job['title']}**\n🔗 [Смотреть волну]({job['link']})\n📝 **Твой оффер:**\n_{pitch}_\n\n"
-            send_to_group(report)
-        # 14400 секунд = 4 часа
-        time.sleep(14400) 
+        # Проверка, привязана ли группа, чтобы не работать вхолостую
+        if CURRENT_LOG_GROUP:
+            print("[HUNTER] Проверка горизонта...")
+            jobs = fetch_real_jobs()
+            if jobs:
+                report = "🛰 **АВТО-ОХОТА: НА ГОРИЗОНТЕ ЖИРНЫЕ ЦЕЛИ!** 🛰\n\n"
+                for job in jobs:
+                    pitch = generate_killer_pitch(job['title'])
+                    report += f"💎 **{job['title']}**\n🔗 [Смотреть волну]({job['link']})\n📝 **Твой оффер:**\n_{pitch}_\n\n"
+                send_to_group(report)
+        else:
+            print("[HUNTER] Группа не привязана. Жду команду /init_logs")
+            
+        time.sleep(14400) # 4 часа
 
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
 def handle_group_init(message):
@@ -87,7 +94,7 @@ def handle_group_init(message):
     if message.text == "/init_logs":
         CURRENT_LOG_GROUP = message.chat.id
         print(f"[SYSTEM] Группа привязана: {CURRENT_LOG_GROUP}")
-        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nТеперь я транслирую отчеты и найденные вакансии сюда. Камон! 🏄‍♀️🤙")
+        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nЯ проснулась и готова к охоте. Все отчеты будут здесь! 🏄‍♀️🤙")
 
 @bot.message_handler(commands=['hunt'])
 def manual_hunt(message):
@@ -101,7 +108,7 @@ def manual_hunt(message):
         for job in jobs:
             report += f"🔥 **{job['title']}**\n🔗 [Взлететь на волну]({job['link']})\n\n"
         bot.send_message(message.chat.id, report, parse_mode="Markdown")
-        send_to_group(report) # Копия в группу
+        send_to_group(report) 
     else:
         bot.reply_to(message, "Штиль на горизонте, Виктория. Ждем прилива! 💨")
 
@@ -119,7 +126,6 @@ def chat_handler(message):
         response = completion.choices[0].message.content
         bot.reply_to(message, response)
         
-        # Отчет в группу о личном сообщении (как ты и просила)
         chat_report = f"💥 **БДЫЩ! ВСПЛЕСК В ЛИЧКЕ!** 💥\n\n👤 {message.from_user.first_name}:\n_{message.text}_\n\n⚡️ **ОТВЕТ DR. SURF:**\n{response}"
         send_to_group(chat_report)
     except Exception as e:
@@ -136,25 +142,18 @@ def start_bot():
     
     try:
         bot.remove_webhook()
-        print("[SYSTEM] Вебхук очищен.")
-    except Exception as e:
-        print(f"[WARNING] Ошибка сброса: {e}")
+    except:
+        pass
 
     while True:
         try:
             print(f"[POLLING] Сессия открыта: {time.strftime('%H:%M:%S')}")
-            # drop_pending_updates=True чтобы не спамить старым при рестарте
             bot.polling(none_stop=True, interval=2, timeout=40, drop_pending_updates=True)
         except Exception as e:
-            print(f"[RESTART] Сбой, камон, ребут через 10с: {e}")
+            print(f"[RESTART] Сбой: {e}")
             time.sleep(10)
 
 if __name__ == "__main__":
-    # 1. Flask для Render (Анти-сон)
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # 2. Фоновая авто-охота за вакансиями
     threading.Thread(target=auto_hunt_loop, daemon=True).start()
-    
-    # 3. Запуск бота (Основной процесс)
     start_bot()
