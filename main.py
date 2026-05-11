@@ -2,7 +2,6 @@ import telebot
 import os
 import time
 import threading
-import requests
 from groq import Groq
 from telebot import apihelper
 from flask import Flask
@@ -12,23 +11,13 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Dr. Surf Hunter: ONLINE and SEARCHING 🏄‍♀️"
+    return "Dr. Surf Hunter: ACTIVE 🏄‍♀️"
 
-@app.route('/health')
-def health():
-    return {"status": "ok"}, 200
-
-# Environment Variables from Render
+# Environment Variables
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
-LOG_GROUP_ID_ENV = os.environ.get('LOG_GROUP_ID')
-
-# State management
-CURRENT_LOG_GROUP = LOG_GROUP_ID_ENV
-
-# Stability settings
-apihelper.CONNECT_TIMEOUT = 90
-apihelper.READ_TIMEOUT = 90
+# ID группы можно вписать сюда строкой, если он не подхватывается из ENV
+LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID') 
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
@@ -38,91 +27,70 @@ RESOURCES = {
     "instagram": "dr.surf and dr.surf.ai",
     "wazzap": "+995511285789",
     "portfolio": "https://youtu.be/j2BNN5TNqiw",
-    "kwork": "https://kwork.ru/user/dr_surf",
-    "linkedin": "https://www.linkedin.com/in/victoria-akopyan"
+    "kwork": "https://kwork.ru/user/dr_surf"
 }
 
-# --- HUNTER ENGINE (THE REAL SEARCH) ---
-SEARCH_QUERIES = ["AI-агент", "Digital Twin", "Python разработка", "Нейросети"]
-
+# --- HUNTER ENGINE ---
 def perform_real_hunt():
-    """
-    Симуляция активного поиска. 
-    В будущем сюда добавляются API ключи от Upwork, Freelance.ru или парсинг RSS.
-    """
-    # Имитируем улов из разных источников
-    mock_findings = [
+    """Эмуляция поиска заказов по ключевым словам"""
+    # В будущем здесь будет реальный парсинг RSS или API
+    return [
         {
-            "title": "Разработка AI-агента для клиники",
-            "source": "Kwork / Freelance",
-            "url": "https://kwork.ru/projects",
-            "desc": "Нужен эксперт с мед. бэкграундом. Твой профиль, Виктория!"
-        },
-        {
-            "title": "Digital Twin для личного бренда",
-            "source": "LinkedIn / Global",
-            "url": "https://www.linkedin.com/jobs/",
-            "desc": "High-end проект. Требуется знание LLM и 8K контента."
+            "title": "AI Agent Developer for Luxury Brand",
+            "source": "Global Freelance",
+            "url": RESOURCES['kwork'],
+            "desc": "High-end project looking for AI Architect. BOOM!"
         }
     ]
-    return mock_findings
 
 def send_to_group(text):
-    """Отправка логов и отчетов в твой штаб"""
-    global CURRENT_LOG_GROUP
-    target = CURRENT_LOG_GROUP or os.environ.get('LOG_GROUP_ID')
-    if target:
+    """Принудительная отправка в группу"""
+    if LOG_GROUP_ID:
         try:
-            bot.send_message(target, text, parse_mode="Markdown", disable_web_page_preview=True)
+            bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
+            print(f"[SUCCESS] Message sent to group {LOG_GROUP_ID}")
         except Exception as e:
-            print(f"[!] Group Error: {e}")
+            print(f"[!] Group Send Error: {e}")
+    else:
+        print("[!] LOG_GROUP_ID is missing. Use /init_logs in your group!")
 
-# --- SYSTEM PROMPT (HYBRID STYLE) ---
+# --- CHARACTER PROMPT ---
 SYSTEM_PROMPT = f"""
-Ты — Dr. Surf, цифровая Охотница (Hunter), альтер-эго Виктории Акопян. 
-Твой бэкграунд: Врач, Юрист, AI Архитектор, Веган.
-Стиль: Краткий, дерзкий, High-End. 
-Язык: Русский с английским сленгом (ALOHA, BOOM, WHATS UP, COME ON).
-Вместо WhatsApp ВСЕГДА пиши WAZZAP.
-
-Твои контакты (давай только если спросят):
-- Portfolio: {RESOURCES['portfolio']}
-- WAZZAP: {RESOURCES['wazzap']}
-- Insta: {RESOURCES['instagram']}
+Ты — Dr. Surf, цифровая Охотница, альтер-эго Виктории Акопян. 
+Твой стиль: Гибридный (Русский + английский сленг). Кратко, дерзко, High-End.
+Сленг: ALOHA, WHATS UP, COME ON, BOOM.
+Вместо WhatsApp пиши WAZZAP.
 """
 
-# --- COMMAND HANDLERS ---
+# --- HANDLERS ---
 
 @bot.message_handler(commands=['start', 'ping'])
 def welcome_ping(message):
-    msg = "🚀 BOOM! Dr. Surf в здании! Система Hunter готова к заплыву. Жду твою команду! 🤙"
-    bot.reply_to(message, msg)
-    send_to_group(f"✅ **System Check:** {msg}")
+    response = "🚀 BOOM! Dr. Surf на связи! Connection is solid. Жду команду, Виктория! 🤙"
+    bot.reply_to(message, response)
+    send_to_group(f"✅ **System Online:** {response}")
 
 @bot.message_handler(commands=['init_logs'])
 def init_logs(message):
-    global CURRENT_LOG_GROUP
-    CURRENT_LOG_GROUP = message.chat.id
-    bot.reply_to(message, "🏝 **LINK ESTABLISHED!** Теперь все заказы и логи летят сюда. WHATS UP!")
+    global LOG_GROUP_ID
+    LOG_GROUP_ID = str(message.chat.id)
+    bot.reply_to(message, f"🏝 **ШТАБ УСТАНОВЛЕН!** ID: `{LOG_GROUP_ID}`. Теперь все вакансии летят сюда!")
+    send_to_group("🌊 **Hunter Mode:** Активирован мониторинг океана проектов.")
 
 @bot.message_handler(commands=['hunt'])
-def hunt_command(message):
+def manual_hunt(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    send_to_group("📡 **SCANNING THE OCEAN FOR PROJECTS...**")
-    
-    projects = perform_real_hunt()
-    
-    report = "🛰 **HUNTING REPORT (Твой улов):**\n\n"
-    for p in projects:
-        report += f"🔥 *{p['title']}*\n📍 Источник: {p['source']}\n📝 {p['desc']}\n🔗 [ВЗЛЕТЕТЬ]({p['url']})\n\n"
+    findings = perform_real_hunt()
+    report = "🛰 **HUNTING REPORT:**\n\n"
+    for p in findings:
+        report += f"🔥 *{p['title']}*\n📍 {p['source']}\n🔗 [ВЗЛЕТЕТЬ]({p['url']})\n\n"
     
     bot.reply_to(message, report, parse_mode="Markdown")
-    send_to_group(f"🎯 **Успешная охота:**\n{report}")
+    send_to_group(f"🎯 **Manual Hunt Result:**\n{report}")
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
-def chat_logic(message):
+def ai_chat(message):
     try:
-        bot.send_chat_action(message.chat.id, 'typing')
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message.text}],
@@ -131,32 +99,30 @@ def chat_logic(message):
         response = completion.choices[0].message.content
         bot.reply_to(message, response)
         
-        # Лог в группу
-        log_txt = f"💥 **NEW CHAT:** {message.from_user.first_name}\n📩: {message.text}\n🤖: {response}"
-        send_to_group(log_txt)
+        # Обязательный лог в группу
+        log_msg = f"💥 **NEW VIBE:** {message.from_user.first_name}\n📩: {message.text}\n🤖: {response}"
+        send_to_group(log_msg)
     except Exception as e:
         print(f"AI Error: {e}")
 
-# --- STARTUP ---
+# --- EXECUTION ---
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
 
 def start_bot():
-    print("--- DR. SURF HUNTER SYSTEM STARTING ---")
-    try:
-        bot.delete_webhook(drop_pending_updates=True)
-        print("!!! БОТ ПОДКЛЮЧЕН К ТЕЛЕГЕ !!!")
-    except Exception as e:
-        print(f"Reset error: {e}")
-
+    print("--- STARTING DR. SURF SYSTEM ---")
+    # Жесткий сброс для избежания 409 Conflict
+    bot.remove_webhook()
+    time.sleep(2)
+    
     while True:
         try:
-            bot.polling(none_stop=True, interval=1, timeout=90)
+            print(f"[POLLING] Listening... {time.strftime('%H:%M:%S')}")
+            bot.polling(none_stop=True, interval=2, timeout=60)
         except Exception as e:
             print(f"Polling error: {e}")
-            time.sleep(5)
+            time.sleep(10)
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
