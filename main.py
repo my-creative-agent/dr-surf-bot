@@ -21,7 +21,7 @@ LOG_GROUP_ID_ENV = os.environ.get('LOG_GROUP_ID')
 # Динамическая привязка группы
 CURRENT_LOG_GROUP = LOG_GROUP_ID_ENV
 
-# Настройки стабильности для облачных серверов
+# Настройки стабильности
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
 
@@ -79,7 +79,6 @@ def handle_group_init(message):
 def manual_hunt(message):
     print(f"[EVENT] Охота запущена!")
     bot.send_chat_action(message.chat.id, 'upload_document')
-    # Имитация данных (можно расширить модулем hunter.py)
     report = "🌊 **ВАТС АП! ЛОВИ СВЕЖИЙ СЕТ!** 🌊\n\n🔥 Найдено 2 жирных проекта! Камон, забираем! 💎"
     bot.send_message(message.chat.id, report, parse_mode="Markdown")
     send_to_group(report)
@@ -104,33 +103,33 @@ def chat_handler(message):
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    print(f"[SYSTEM] Flask стартовал на порту {port}")
-    app.run(host='0.0.0.0', port=port)
+    print(f"[SYSTEM] Flask: Старт на порту {port}")
+    # Убираем debug=True и использование reloader, чтобы не плодить процессы
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 def start_bot():
     print("--- DR. SURF: HIGH-END EDITION STARTING ---")
     
-    # Принудительная очистка вебхука
+    # Даем Flask немного времени на прогрев
+    time.sleep(5)
+    
     try:
         bot.remove_webhook()
-        time.sleep(2)
-        print("[SYSTEM] Вебхук чист. Переходим на Polling.")
+        print("[SYSTEM] Вебхук очищен.")
     except Exception as e:
         print(f"[WARNING] Ошибка сброса: {e}")
 
-    # Запуск бесконечного цикла
     while True:
         try:
-            print(f"[POLLING] Слушаю эфир... {time.strftime('%H:%M:%S')}")
-            # Ставим long_polling_timeout для предотвращения обрывов на Render
-            bot.polling(none_stop=True, interval=2, timeout=60)
+            print(f"[POLLING] Сессия открыта: {time.strftime('%H:%M:%S')}")
+            bot.polling(none_stop=True, interval=2, timeout=40)
         except Exception as e:
-            print(f"[RESTART] Сбой, камон, ребут через 5с: {e}")
-            time.sleep(5)
+            print(f"[RESTART] Сбой, камон, ребут через 10с: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+    # Flask в фоне
+    threading.Thread(target=run_flask, daemon=True).start()
     
-    # Запускаем бота
+    # Бот в основном потоке
+    start_bot()
