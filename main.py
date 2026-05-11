@@ -232,4 +232,4 @@ if __name__ == "__main__":
     threading.Thread(target=auto_hunter, daemon=True).start()
     bot.remove_webhook()
     time.sleep(1)
-    bot.polling(none_stop=True, interval=2, timeout=90
+    bot.polling(none_stop=True, interval=2, timeout=90)
