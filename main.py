@@ -83,9 +83,8 @@ def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
     """Специальный модуль для HeadHunter через API с защитой от блокировок"""
     try:
         url = f"https://api.hh.ru/vacancies?text={query}&area=1&per_page={limit}"
-        # Имитируем реальный браузер для HH
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
         }
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code == 200:
@@ -124,14 +123,19 @@ def get_best_template(title):
 
 def fetch_orders(ignore_history=False):
     found = []
-    # 1. Сбор с RSS (FL, Habr, Kwork)
+    # 1. Сбор с RSS (FL, Habr, Kwork, Freelance.ru)
     for feed_info in RSS_FEEDS:
         try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
+            # Улучшенные заголовки для обхода блокировок на Kwork/Habr
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
+                'Accept': 'application/rss+xml, application/xml;q=0.9, */*;q=0.8'
+            }
             response = requests.get(feed_info["url"], headers=headers, timeout=15)
-            feed = feedparser.parse(response.content)
+            # Принудительная расшифровка контента для корректного парсинга
+            feed = feedparser.parse(response.content if response.status_code == 200 else response.text)
             
-            for entry in feed.entries[:20]:
+            for entry in feed.entries[:25]:
                 content = (entry.title + getattr(entry, 'description', '')).lower()
                 if any(word in content for word in KEYWORDS):
                     if ignore_history or (entry.link not in SENT_PROJECTS):
@@ -146,7 +150,7 @@ def fetch_orders(ignore_history=False):
         except Exception as e: 
             print(f"Error fetching {feed_info['name']}: {e}")
     
-    # 2. Сбор с HeadHunter (Критически важно!)
+    # 2. Сбор с HeadHunter
     hh_results = fetch_hh_vacancies()
     for v in hh_results:
         if ignore_history or (v['url'] not in SENT_PROJECTS):
@@ -161,7 +165,8 @@ def send_to_group(text):
         except Exception as e: print(f"Log Error: {e}", flush=True)
 
 def auto_hunter():
-    print("[HUNTER] Модуль поиска запущен", flush=True)
+    """Фоновый процесс автоматического мониторинга всех источников"""
+    print("[HUNTER] Автоматический мониторинг запущен", flush=True)
     while True:
         try:
             projects = fetch_orders()
@@ -169,22 +174,27 @@ def auto_hunter():
                 for p in projects:
                     msg = f"💎 **НОВЫЙ ЗАКАЗ!**\n\n📍 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Открыть заказ]({p['url']})\n\n📝 **ОТКЛИК:**\n{p['offer']}\n\n{MY_CONTACTS}"
                     send_to_group(msg)
+                    time.sleep(3)
         except Exception as e: 
             print(f"Hunter Error: {e}", flush=True)
-        time.sleep(1200) # Проверка каждые 20 минут
+        
+        # Проверка каждые 15 минут для большей оперативности
+        time.sleep(900)
 
 # --- ОБРАБОТКА КОМАНД ---
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter онлайн! Используй /check для поиска заказов. Я слежу за биржами и HH 24/7! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter онлайн! Используй /check для ручного поиска. Я автоматически проверяю все биржи и HH каждые 15 минут! 🌊")
 
 @bot.message_handler(commands=['check'])
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
-    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (ВКЛЮЧАЯ HH):**\n\n"
+    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (ВСЕ ПЛОЩАДКИ):**\n\n"
     if projects:
+        # Сортируем так, чтобы разные площадки перемешивались
+        random.shuffle(projects)
         for p in projects[:15]:
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
     else:
@@ -217,7 +227,7 @@ def chat(message):
 # --- ЗАПУСК ---
 
 def run_bot():
-    print("[BOT] Запуск процесса polling...", flush=True)
+    print("[BOT] Запуск основного процесса Telegram...", flush=True)
     while True:
         try:
             bot.remove_webhook()
