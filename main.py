@@ -25,14 +25,16 @@ bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
 # --- ТВОИ ПРУФЫ И КОНТАКТЫ ---
-BOT_URL = "https://t.me/Dr_Surf_AI_bot"
+MAIN_BOT_URL = "https://t.me/Dr_Surf_AI_bot" # Твой основной цифровой двойник
+HUNTER_BOT_URL = "https://t.me/Dr_Surf_Hunter_bot" # Этот бот-охотник
 PORTFOLIO_URL = "https://youtu.be/j2BNN5TNqiw"
 
 MY_CONTACTS = f"""
 👤 **Виктория Акопян**
 🌟 *AI Prompt Engineer | Digital Twin Architect | Video Creator*
 
-🚀 **Live Case:** {BOT_URL}
+🚀 **Digital Twin:** {MAIN_BOT_URL}
+📡 **Hunter Service:** {HUNTER_BOT_URL}
 🎬 **Video Portfolio:** {PORTFOLIO_URL}
 
 🔹 **Stack:** Sora, Runway Gen-3, HeyGen, Threads Automation, Flux, Llama 3.3.
@@ -91,11 +93,11 @@ def get_best_template(title):
     if any(x in t for x in ["видео", "video", "sora", "runway", "kling", "luma"]):
         return OFFER_TEMPLATES["video"].format(portfolio_url=PORTFOLIO_URL)
     elif any(x in t for x in ["агент", "agent", "бот", "чат", "llama"]):
-        return OFFER_TEMPLATES["ai_agent"].format(bot_url=BOT_URL)
+        return OFFER_TEMPLATES["ai_agent"].format(bot_url=MAIN_BOT_URL)
     elif any(x in t for x in ["threads", "тредс"]):
         return OFFER_TEMPLATES["threads"]
     else:
-        return OFFER_TEMPLATES["general"].format(bot_url=BOT_URL)
+        return OFFER_TEMPLATES["general"].format(bot_url=MAIN_BOT_URL)
 
 def fetch_orders(ignore_history=False):
     found = []
@@ -155,7 +157,7 @@ def auto_hunter():
 # --- КОМАНДЫ ---
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter: Теперь я подбираю отклики под каждый заказ автоматически! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter: Бот активен. Я подбираю отклики и ссылки на вакансии автоматически. 🌊")
 
 @bot.message_handler(commands=['hunt', 'check'])
 def manual_check(message):
@@ -182,18 +184,29 @@ def manual_check(message):
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
     try:
-        system_msg = f"Ты — Dr. Surf, аватар Виктории Акопян. Отвечай кратко. Контакты: {BOT_URL}"
+        system_msg = f"Ты — Dr. Surf, аватар Виктории Акопян (веган, AI эксперт). Отвечай кратко. Контакты: {MAIN_BOT_URL}"
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
         )
         bot.reply_to(message, completion.choices[0].message.content)
-    except: pass
+    except Exception as e:
+        print(f"Chat error: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
+    # Запуск Flask
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
+    # Запуск Охотника
     threading.Thread(target=auto_hunter, daemon=True).start()
-    bot.remove_webhook()
-    time.sleep(1)
-    bot.polling(none_stop=True, interval=2, timeout=90)
+    
+    # Решение ошибки Conflict 409
+    try:
+        bot.stop_polling()
+        time.sleep(5) # Даем время Telegram закрыть старые соединения
+        bot.remove_webhook()
+        print("Polling started successfully...")
+        bot.polling(none_stop=True, interval=2, timeout=90)
+    except Exception as e:
+        print(f"Critical error: {e}")
+        time.sleep(10)
