@@ -5,6 +5,7 @@ import threading
 import feedparser
 import requests
 import random
+import re
 from groq import Groq
 from flask import Flask
 
@@ -53,7 +54,6 @@ RESPONSE_TEMPLATE = f"""
 
 # --- РАДАР ВАКАНСИЙ (HH.ru и LinkedIn) ---
 def get_job_links():
-    # Ключевые слова для поиска
     query = "AI+Video+Creator+HeyGen+Sora+Runway+AI+Agent+Prompt"
     return {
         "HH.ru": f"https://hh.ru/search/vacancy?text={query}&area=1&order_by=publication_time",
@@ -68,13 +68,22 @@ RSS_FEEDS = [
 ]
 SENT_PROJECTS = set() 
 
+def extract_price(entry):
+    """Попытка извлечь цену из заголовка или описания"""
+    price_pattern = r"(\d[\d\s]*\d\s?(?:руб|руб\.|₽|\$|USD|BYN|евро|€))"
+    match = re.search(price_pattern, entry.title, re.IGNORECASE)
+    if match: return match.group(1).strip()
+    desc = getattr(entry, 'summary', '') or getattr(entry, 'description', '')
+    match = re.search(price_pattern, desc, re.IGNORECASE)
+    if match: return match.group(1).strip()
+    return "Цена не указана"
+
 def fetch_orders():
     found = []
     keywords = [
         "ai агент", "нейросеть видео", "heygen", "sora", "runway", "luma", "pika",
         "фотореализм", "аватар", "создание видео", "midjourney", "flux", "prompt"
     ]
-    
     for url in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
@@ -84,42 +93,34 @@ def fetch_orders():
                 if any(word.lower() in title for word in keywords) or any(word.lower() in desc for word in keywords):
                     if entry.link not in SENT_PROJECTS:
                         site = "🎨 KWORK" if "kwork" in url else "👨‍💻 HABR" if "habr" in url else "🚀 FL"
-                        found.append({"title": entry.title, "url": entry.link, "site": site})
+                        price = extract_price(entry)
+                        found.append({"title": entry.title, "url": entry.link, "site": site, "price": price})
                         SENT_PROJECTS.add(entry.link)
-        except:
-            pass
+        except: pass
     return found
 
 def send_to_group(text):
     if LOG_GROUP_ID:
         try:
             bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
-        except:
-            pass
+        except: pass
 
 def auto_hunter():
     while True:
         try:
             projects = fetch_orders()
             job_links = get_job_links()
-            
-            # Если есть новые фриланс-проекты, шлем полный отчет
             if projects:
                 report = "💎 **ВИКТОРИЯ, НОВЫЙ УЛОВ!**\n\n"
                 for p in projects:
-                    report += f"📍 **{p['site']}** | {p['title']}\n🔗 [Открыть заказ]({p['url']})\n\n"
-                
+                    report += f"📍 **{p['site']}** | {p['title']}\n💰 **Бюджет:** {p['price']}\n🔗 [Открыть заказ]({p['url']})\n\n"
                 report += "🛰 **HH.RU И LINKEDIN (ПРЯМОЙ ПОИСК):**\n"
-                report += f"💼 [Вакансии на HH.ru]({job_links['HH.ru']})\n"
-                report += f"🔗 [Вакансии на LinkedIn]({job_links['LinkedIn']})\n\n"
-                
+                report += f"💼 [Вакансии на HH.ru]({job_links['HH.ru']})\n🔗 [LinkedIn]({job_links['LinkedIn']})\n\n"
                 report += f"--- \n{RESPONSE_TEMPLATE}\n\n{MY_CONTACTS}"
                 send_to_group(report)
         except Exception as e:
-            print(f"Error in hunter: {e}")
             time.sleep(60)
-        
-        time.sleep(1800) # Проверка каждые 30 минут
+        time.sleep(1800)
 
 # --- КОМАНДЫ ---
 @bot.message_handler(commands=['start'])
@@ -131,28 +132,21 @@ def manual_check(message):
     bot.reply_to(message, "🔍 Проверяю все биржи и вакансии HH.ru прямо сейчас...")
     projects = fetch_orders()
     job_links = get_job_links()
-    
     report = "🚀 **АКТУАЛЬНО НА ДАННЫЙ МОМЕНТ:**\n\n"
     if projects:
-        for p in projects: report += f"💠 {p['title']}\n🔗 {p['url']}\n\n"
-    else:
-        report += "🌊 Новых заказов на биржах пока нет.\n\n"
-    
-    report += "🛰 **РАДАР ВАКАНСИЙ:**\n"
-    report += f"💼 [HH.ru]({job_links['HH.ru']})\n"
-    report += f"🔗 [LinkedIn]({job_links['LinkedIn']})\n\n"
-    report += f"{MY_CONTACTS}"
-    
+        for p in projects: report += f"💠 {p['title']}\n💰 **Бюджет:** {p['price']}\n🔗 {p['url']}\n\n"
+    else: report += "🌊 Новых заказов пока нет.\n\n"
+    report += f"🛰 **РАДАР ВАКАНСИЙ:**\n💼 [HH.ru]({job_links['HH.ru']})\n🔗 [LinkedIn]({job_links['LinkedIn']})\n\n{MY_CONTACTS}"
     bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
 
-# --- ЦИФРОВОЙ ДВОЙНИК + ЛОГИ ---
+# --- ЦИФРОВОЙ ДВОЙНИК + ПОЛНЫЙ ДИАЛОГ В ОТЧЕТЕ ---
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
     try:
+        # Промпт: веган, медик, AI-эксперт
         system_msg = f"""Ты — Dr. Surf, цифровой аватар Виктории Акопян. 
-        Твоя специализация: Промпт-инжиниринг, AI-видео (Sora, HeyGen), AI-агенты.
-        ОТВЕЧАЙ: Кратко, четко, как Senior Prompt Engineer. Никакой воды. 
-        Твой живой кейс — этот бот: {BOT_URL}. Портфолио: {PORTFOLIO_URL}."""
+        Ты веган, эксперт в промпт-инжиниринге и AI-видео.
+        ОТВЕЧАЙ: Кратко, четко, без воды. Твой кейс: {BOT_URL}."""
         
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -161,10 +155,20 @@ def chat(message):
         ans = completion.choices[0].message.content
         bot.reply_to(message, ans)
         
-        # Логирование переписки в группу
+        # ОТЧЕТ О ДИАЛОГЕ В ГРУППУ
         if LOG_GROUP_ID:
-            log_text = f"📩 **СООБЩЕНИЕ ОТ КЛИЕНТА!**\n\n👤 **Запрос:** {message.text}\n\n🤖 **Твой ответ:** {ans}"
-            send_to_group(log_text)
+            user = message.from_user
+            username = f"@{user.username}" if user.username else f"ID: {user.id}"
+            
+            log_report = (
+                f"📝 **ПОЛНЫЙ ДИАЛОГ С КЛИЕНТОМ**\n"
+                f"👤 **От кого:** {user.first_name} ({username})\n"
+                f"━━━━━━━━━━━━━━━━━━\n"
+                f"❓ **Вопрос:**\n_{message.text}_\n\n"
+                f"🤖 **Твой ответ (Dr. Surf):**\n{ans}\n"
+                f"━━━━━━━━━━━━━━━━━━"
+            )
+            send_to_group(log_report)
             
     except Exception as e:
         print(f"Error in chat: {e}")
@@ -173,8 +177,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
     threading.Thread(target=auto_hunter, daemon=True).start()
-    
     bot.remove_webhook()
     time.sleep(1)
-    print("--- Dr. Surf запущен ---")
     bot.polling(none_stop=True, interval=2, timeout=90)
