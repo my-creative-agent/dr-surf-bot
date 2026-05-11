@@ -44,7 +44,7 @@ MIN_PRICE_THRESHOLD = 15000
 # --- ПРОМТ ДЛЯ ГЕНЕРАЦИИ ВАЙБА ---
 SYSTEM_PROMPT = f"""
 Ты — Dr. Surf, цифровая Охотница и альтер-эго Виктории Акопян. 
-Твой стиль: High-End, серферский драйв, абсолютный позитив и медицинская точность.
+Твой стиль: High-End, серферский драйв, абсолютный позитив и медицинской точность.
 
 ТЫ: Врач (МГМСУ), Нутрициолог (веган), Юрист и AI-Архитектор.
 ТВОЯ ЗАДАЧА: Отвечать клиентам экспертно, но с характером. 
@@ -132,13 +132,31 @@ def chat_handler(message):
         print(f"[ERROR] {e}")
 
 def run_flask():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000)))
+    # Render использует порт из переменной окружения PORT, по умолчанию 10000
+    port = int(os.environ.get("PORT", 10000))
+    print(f"[SYSTEM] Flask запускается на порту {port}...")
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    print("--- DR. SURF: HIGH-END EDITION START ---")
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    print("--- DR. SURF: HIGH-END EDITION STARTING ---")
+    
+    # Сброс вебхука принудительно перед началом polling
+    try:
+        print("[SYSTEM] Сброс вебхука для активации polling...")
+        bot.remove_webhook()
+        time.sleep(1)
+        print("[SYSTEM] Вебхук успешно удален.")
+    except Exception as e:
+        print(f"[WARNING] Не удалось удалить вебхук: {e}")
+
     while True:
         try:
+            print(f"[POLLING] Бот слушает волну... ({time.strftime('%H:%M:%S')})")
             bot.polling(none_stop=True, interval=2, timeout=90, drop_pending_updates=True)
         except Exception as e:
+            print(f"[RESTART] Ошибка polling, камон, переподключаемся через 10 сек: {e}")
             time.sleep(10)
