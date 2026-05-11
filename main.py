@@ -135,10 +135,11 @@ def fetch_orders(ignore_history=False):
 def send_to_group(text):
     if LOG_GROUP_ID:
         try: bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
-        except: pass
+        except Exception as e: print(f"Error sending log: {e}")
 
 def auto_hunter():
     global LAST_JOB_REPORT_TIME
+    print("Auto Hunter started...")
     while True:
         try:
             projects = fetch_orders()
@@ -163,7 +164,9 @@ def auto_hunter():
                 send_to_group(job_report)
                 LAST_JOB_REPORT_TIME = current_time
                 
-        except: time.sleep(60)
+        except Exception as e: 
+            print(f"Hunter error: {e}")
+            time.sleep(60)
         time.sleep(1800) 
 
 # --- КОМАНДЫ ---
@@ -193,22 +196,31 @@ def manual_check(message):
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
     try:
-        system_msg = f"Ты — Dr. Surf, аватар Виктории Акопян. Эксперт по ИИ, видео и графике. Контакты: {MAIN_BOT_URL}"
+        system_msg = f"Ты — Dr. Surf, аватар Виктории Акопян. Эксперт по ИИ, видео и графике. Твой характер: лаконичный, профессиональный. Ты веган и медик. Твои контакты: {MAIN_BOT_URL}"
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
         )
         bot.reply_to(message, completion.choices[0].message.content)
-    except: pass
+    except Exception as e:
+        print(f"Chat error: {e}")
 
 if __name__ == "__main__":
+    # Render использует порт из переменной окружения PORT
     port = int(os.environ.get("PORT", 10000))
+    
+    # Запускаем Flask в отдельном потоке
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
+    
+    # Запускаем охотника в отдельном потоке
     threading.Thread(target=auto_hunter, daemon=True).start()
+    
+    print(f"Starting bot on port {port}...")
     
     while True:
         try:
             bot.remove_webhook()
             bot.polling(none_stop=True, interval=2, timeout=90, drop_pending_updates=True)
-        except:
+        except Exception as e:
+            print(f"Polling error: {e}")
             time.sleep(10)
