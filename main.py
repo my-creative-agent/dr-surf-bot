@@ -139,7 +139,7 @@ def fetch_orders(ignore_history=False):
                         if not ignore_history: SENT_PROJECTS.add(entry.link)
         except: pass
     
-    # 2. Сбор с HH.ru (добавляем к списку)
+    # 2. Сбор с HH.ru
     hh_results = fetch_hh_vacancies()
     for v in hh_results:
         if ignore_history or (v['url'] not in SENT_PROJECTS):
@@ -176,9 +176,9 @@ def welcome(message):
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
-    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (Включая HH):**\n\n"
+    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ:**\n\n"
     if projects:
-        for p in projects[:10]: # Увеличил лимит до 10
+        for p in projects[:10]:
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
     else:
         report += "🌊 Пока горизонт чист. Попробуй позже!\n"
@@ -199,7 +199,6 @@ def chat(message):
         ai_response = completion.choices[0].message.content
         bot.reply_to(message, ai_response)
         
-        # Логирование
         anon_id = str(message.from_user.id)[-4:]
         log_msg = f"💬 **ЧАТ (...{anon_id})**\n👤: {message.text}\n🤖: {ai_response}"
         send_to_group(log_msg)
