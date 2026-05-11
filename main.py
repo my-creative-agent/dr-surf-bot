@@ -16,8 +16,10 @@ def home():
 # Переменные окружения
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
-# Пытаемся взять ID группы из настроек Render (если есть)
-LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID') 
+
+# --- ЖЕСТКАЯ ПРИВЯЗКА ГРУППЫ (С ДЕФИСОМ) ---
+# Мы используем твой ID напрямую. Дефис в начале обязателен для групп.
+LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID', '-5025901736') 
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
@@ -41,12 +43,12 @@ SENT_PROJECTS = set()
 
 def fetch_orders():
     found = []
-    keywords = ["AI", "Агент", "Python", "Нейросеть", "LLM", "Бот", "ИИ", "GPT", "Чат-бот"]
-    print(f"[DEBUG] Проверка RSS лент...")
+    keywords = ["AI", "Агент", "Python", "Нейросеть", "LLM", "Бот", "ИИ", "GPT", "Чат-бот", "Automation"]
+    print(f"[DEBUG] Охота началась...")
     for url in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:15]:
+            for entry in feed.entries[:20]:
                 title = entry.title.lower()
                 if any(word.lower() in title for word in keywords):
                     if entry.link not in SENT_PROJECTS:
@@ -58,95 +60,77 @@ def fetch_orders():
 
 def send_to_group(text):
     global LOG_GROUP_ID
-    target = LOG_GROUP_ID or os.environ.get('LOG_GROUP_ID')
-    if target:
+    if LOG_GROUP_ID:
         try:
-            bot.send_message(target, text, parse_mode="Markdown", disable_web_page_preview=True)
+            bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
             return True
         except Exception as e:
-            print(f"[ERROR] Group Send failed to {target}: {e}")
-    else:
-        print("[WARNING] LOG_GROUP_ID не установлен. Бот не знает куда слать отчет.")
+            print(f"[ERROR] Не удалось отправить в группу {LOG_GROUP_ID}: {e}")
     return False
 
-# --- АВТОМАТИЧЕСКАЯ ПРОВЕРКА (КАЖДЫЕ 30 МИНУТ) ---
+# --- АВТОМАТИЧЕСКАЯ ПРОВЕРКА ---
 def auto_hunter():
-    print("[SYSTEM] Запуск модуля охоты...")
-    # Небольшая пауза при старте, чтобы Telegram успел проснуться
-    time.sleep(10)
+    print(f"[SYSTEM] Модуль охоты запущен. Цель: {LOG_GROUP_ID}")
+    time.sleep(10) # Даем боту загрузиться
     
     while True:
         try:
             projects = fetch_orders()
             if projects:
-                report = "🛰 **Dr. Surf: Свежий улов с бирж:**\n\n"
+                report = "🚀 **Dr. Surf: Новые волны на горизонте!**\n\n"
                 for p in projects:
                     report += f"🔹 {p['title']}\n🔗 [Открыть заказ]({p['url']})\n\n"
-                if not send_to_group(report):
-                    print("[SYSTEM] Отчет готов, но группа не привязана.")
+                send_to_group(report)
             else:
-                print("[DEBUG] Новых заказов пока нет.")
+                print("[DEBUG] Пока новых заказов не обнаружено.")
         except Exception as e:
-            print(f"[ERROR] Auto-Hunter Loop: {e}")
-        time.sleep(1800) 
+            print(f"[ERROR] Ошибка в цикле охотника: {e}")
+        time.sleep(1800) # Проверка каждые 30 минут
 
-# --- ХАРАКТЕР AI ---
-SYSTEM_PROMPT = f"""
-Ты — Dr. Surf, AI-аватар Виктории Акопян (Медик МГМСУ/МОНИКИ, Юрист, AI Архитектор).
-Стиль: Профессиональный, лаконичный. Ты веган.
-Никаких "Алоха" и "Бум". Отвечай по существу.
-Контакты давай только если просят: {MY_CONTACTS}
-"""
-
+# --- ОБРАБОТКА КОМАНД ---
 @bot.message_handler(commands=['start', 'ping'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf на связи. Мониторинг активен. Чтобы привязать логи к этой группе, введите /init_logs")
+    bot.reply_to(message, "Dr. Surf в сети. Мониторинг заказов активен.")
 
 @bot.message_handler(commands=['check'])
 def manual_check(message):
-    bot.reply_to(message, "🔍 Начинаю внеплановый поиск заказов...")
+    bot.reply_to(message, "🔍 Сканирую биржи вручную...")
     projects = fetch_orders()
     if projects:
-        report = "🛰 **Ручной поиск принес результаты:**\n\n"
+        report = "🛰 **Результат сканирования:**\n\n"
         for p in projects:
             report += f"🔹 {p['title']}\n🔗 [Открыть заказ]({p['url']})\n\n"
         bot.send_message(message.chat.id, report, parse_mode="Markdown")
     else:
-        bot.reply_to(message, "🌊 На биржах пока штиль. Подходящих проектов не найдено.")
-
-@bot.message_handler(commands=['init_logs'])
-def init_logs(message):
-    global LOG_GROUP_ID
-    LOG_GROUP_ID = str(message.chat.id)
-    bot.reply_to(message, f"✅ Успешно! Группа привязана (ID: {LOG_GROUP_ID}). Сюда будут падать заказы и переписки.")
-    send_to_group("🔔 Тестовое уведомление: Мониторинг заказов подключен к этому чату.")
+        bot.reply_to(message, "🌊 Чисто. Новых заказов по AI пока нет.")
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
     try:
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message.text}]
+            messages=[
+                {"role": "system", "content": "Ты — Dr. Surf, AI-аватар Виктории Акопян. Веган, медик, эксперт. Отвечай кратко."},
+                {"role": "user", "content": message.text}
+            ]
         )
         ans = completion.choices[0].message.content
         bot.reply_to(message, ans)
-        send_to_group(f"📩 **Личное сообщение от пользователя:**\n{message.text}\n\n🤖 **Твой ответ:**\n{ans}")
+        send_to_group(f"📩 **Личное от пользователя:** {message.text}\n\n🤖 **Твой ответ:** {ans}")
     except Exception as e:
         print(f"[ERROR] AI Chat: {e}")
 
-# --- ЗАПУСК ---
 if __name__ == "__main__":
-    # 1. Запуск Flask сервера (для Render)
+    # Запуск Flask
     port = int(os.environ.get("PORT", 10000))
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
     
-    # 2. Запуск фонового охотника
+    # Запуск Охотника
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    # 3. Очистка вебхуков и запуск бота
-    print("[SYSTEM] Перезагрузка Telegram сессии...")
+    # Очистка и запуск
+    print("[SYSTEM] Перезагрузка Telegram API...")
     bot.remove_webhook()
-    time.sleep(3)
-    
-    print("[SYSTEM] Бот запущен и готов к работе.")
+    time.sleep(2)
+    print(f"[SUCCESS] Бот Dr. Surf запущен. Логи: {LOG_GROUP_ID}")
     bot.polling(none_stop=True, skip_pending=True)
