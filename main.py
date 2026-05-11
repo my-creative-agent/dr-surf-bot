@@ -73,7 +73,8 @@ def handle_group_init(message):
     global CURRENT_LOG_GROUP
     if message.text == "/init_logs":
         CURRENT_LOG_GROUP = message.chat.id
-        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nТеперь здесь будет самый сочный движ. Камон! 🏄‍♀️🤙")
+        print(f"[SYSTEM] Группа привязана: {CURRENT_LOG_GROUP}")
+        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nТеперь я транслирую весь движ сюда. Камон! 🏄‍♀️🤙")
 
 @bot.message_handler(commands=['hunt'])
 def manual_hunt(message):
@@ -104,13 +105,11 @@ def chat_handler(message):
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     print(f"[SYSTEM] Flask: Старт на порту {port}")
-    # Убираем debug=True и использование reloader, чтобы не плодить процессы
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 def start_bot():
     print("--- DR. SURF: HIGH-END EDITION STARTING ---")
     
-    # Даем Flask немного времени на прогрев
     time.sleep(5)
     
     try:
@@ -128,8 +127,5 @@ def start_bot():
             time.sleep(10)
 
 if __name__ == "__main__":
-    # Flask в фоне
     threading.Thread(target=run_flask, daemon=True).start()
-    
-    # Бот в основном потоке
     start_bot()
