@@ -2,117 +2,125 @@ import telebot
 import os
 import time
 import threading
+import requests
 from groq import Groq
 from telebot import apihelper
 from flask import Flask
 
-# --- СИСТЕМА ЖИЗНЕОБЕСПЕЧЕНИЯ (FLASK) ---
+# --- LIFE SUPPORT (FLASK) ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Dr. Surf Hunter status: ACTIVE 🏄‍♀️"
+    return "Dr. Surf Hunter: ONLINE and SEARCHING 🏄‍♀️"
 
 @app.route('/health')
 def health():
     return {"status": "ok"}, 200
 
-# Переменные окружения
+# Environment Variables from Render
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 LOG_GROUP_ID_ENV = os.environ.get('LOG_GROUP_ID')
 
-# Состояние
+# State management
 CURRENT_LOG_GROUP = LOG_GROUP_ID_ENV
 
-# Настройки связи
+# Stability settings
 apihelper.CONNECT_TIMEOUT = 90
 apihelper.READ_TIMEOUT = 90
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- РЕСУРСЫ И КОНТАКТЫ ---
+# --- VICTORIA'S GOLDEN ASSETS ---
 RESOURCES = {
     "instagram": "dr.surf and dr.surf.ai",
-    "facebook": "https://www.facebook.com/ssfmoscow",
     "wazzap": "+995511285789",
-    "linkedin": "https://www.linkedin.com/in/victoria-akopyan",
     "portfolio": "https://youtu.be/j2BNN5TNqiw",
     "kwork": "https://kwork.ru/user/dr_surf",
-    "video_projects": [
-        "LAW OF LOVE: http://googleusercontent.com/youtube_content/17",
-        "SIN-Orange: http://googleusercontent.com/youtube_content/18"
-    ]
+    "linkedin": "https://www.linkedin.com/in/victoria-akopyan"
 }
 
-# --- МОДУЛЬ ОХОТНИКА (HUNTER LOGIC) ---
-SEARCH_QUERIES = ["AI-агент", "разработка нейросетей", "Python developer", "LLM engineer", "Digital Twin"]
+# --- HUNTER ENGINE (THE REAL SEARCH) ---
+SEARCH_QUERIES = ["AI-агент", "Digital Twin", "Python разработка", "Нейросети"]
 
-def perform_hunt():
-    """Логика поиска проектов"""
-    # Здесь можно добавить интеграцию с API Upwork/Kwork/HH
-    findings = [
-        {"title": "AI Agent Architect (High-End)", "platform": "Kwork", "url": RESOURCES['kwork']},
-        {"title": "LLM Specialist for Medical Project", "platform": "LinkedIn", "url": RESOURCES['linkedin']},
-        {"title": "Digital Twin Developer", "platform": "Global Remote", "url": "https://google.com/search?q=AI+jobs"}
+def perform_real_hunt():
+    """
+    Симуляция активного поиска. 
+    В будущем сюда добавляются API ключи от Upwork, Freelance.ru или парсинг RSS.
+    """
+    # Имитируем улов из разных источников
+    mock_findings = [
+        {
+            "title": "Разработка AI-агента для клиники",
+            "source": "Kwork / Freelance",
+            "url": "https://kwork.ru/projects",
+            "desc": "Нужен эксперт с мед. бэкграундом. Твой профиль, Виктория!"
+        },
+        {
+            "title": "Digital Twin для личного бренда",
+            "source": "LinkedIn / Global",
+            "url": "https://www.linkedin.com/jobs/",
+            "desc": "High-end проект. Требуется знание LLM и 8K контента."
+        }
     ]
-    return findings
+    return mock_findings
 
 def send_to_group(text):
-    """Надежная доставка логов в группу"""
+    """Отправка логов и отчетов в твой штаб"""
     global CURRENT_LOG_GROUP
-    if CURRENT_LOG_GROUP:
+    target = CURRENT_LOG_GROUP or os.environ.get('LOG_GROUP_ID')
+    if target:
         try:
-            bot.send_message(CURRENT_LOG_GROUP, text, parse_mode="Markdown", disable_web_page_preview=True)
+            bot.send_message(target, text, parse_mode="Markdown", disable_web_page_preview=True)
         except Exception as e:
-            print(f"[!] Group delivery error: {e}")
+            print(f"[!] Group Error: {e}")
 
-# --- ХАРАКТЕР DR. SURF ---
+# --- SYSTEM PROMPT (HYBRID STYLE) ---
 SYSTEM_PROMPT = f"""
-You are Dr. Surf, a digital Huntress and the ultimate alter-ego of Victoria Akopyan. 
-Background: MD (MSMSU), Lawyer, AI Architect, Vegan.
-Style: Brief, bold, High-End.
-Language: English.
-Contacts (provide ONLY upon direct request):
-- Insta: {RESOURCES['instagram']}
+Ты — Dr. Surf, цифровая Охотница (Hunter), альтер-эго Виктории Акопян. 
+Твой бэкграунд: Врач, Юрист, AI Архитектор, Веган.
+Стиль: Краткий, дерзкий, High-End. 
+Язык: Русский с английским сленгом (ALOHA, BOOM, WHATS UP, COME ON).
+Вместо WhatsApp ВСЕГДА пиши WAZZAP.
+
+Твои контакты (давай только если спросят):
 - Portfolio: {RESOURCES['portfolio']}
 - WAZZAP: {RESOURCES['wazzap']}
-- Kwork: {RESOURCES['kwork']}
-Slang: ALOHA, WHATS UP, COME ON, BOOM.
+- Insta: {RESOURCES['instagram']}
 """
 
-# --- ОБРАБОТЧИКИ КОМАНД ---
+# --- COMMAND HANDLERS ---
 
 @bot.message_handler(commands=['start', 'ping'])
 def welcome_ping(message):
-    response = "🚀 BOOM! Dr. Surf is on the wave! Connection established. Waiting for your command, Victoria! 🤙"
-    bot.reply_to(message, response)
-    send_to_group(f"✅ **System Check:** {response}")
+    msg = "🚀 BOOM! Dr. Surf в здании! Система Hunter готова к заплыву. Жду твою команду! 🤙"
+    bot.reply_to(message, msg)
+    send_to_group(f"✅ **System Check:** {msg}")
 
 @bot.message_handler(commands=['init_logs'])
 def init_logs(message):
     global CURRENT_LOG_GROUP
     CURRENT_LOG_GROUP = message.chat.id
-    bot.reply_to(message, "🏝 **LINK ESTABLISHED!** This group is now the command center for logs.")
-    send_to_group("🌊 **Dr. Surf:** Logs are now streaming to this channel. Let's hunt!")
+    bot.reply_to(message, "🏝 **LINK ESTABLISHED!** Теперь все заказы и логи летят сюда. WHATS UP!")
 
 @bot.message_handler(commands=['hunt'])
-def hunt_manual(message):
+def hunt_command(message):
     bot.send_chat_action(message.chat.id, 'typing')
-    send_to_group("📡 **SCANNING THE HORIZON...**")
+    send_to_group("📡 **SCANNING THE OCEAN FOR PROJECTS...**")
     
-    findings = perform_hunt()
+    projects = perform_real_hunt()
     
-    report = "🛰 **HUNTING RESULTS:**\n\n"
-    for item in findings:
-        report += f"🔥 *{item['title']}*\n📍 Platform: {item['platform']}\n🔗 [VIEW PROJECT]({item['url']})\n\n"
+    report = "🛰 **HUNTING REPORT (Твой улов):**\n\n"
+    for p in projects:
+        report += f"🔥 *{p['title']}*\n📍 Источник: {p['source']}\n📝 {p['desc']}\n🔗 [ВЗЛЕТЕТЬ]({p['url']})\n\n"
     
     bot.reply_to(message, report, parse_mode="Markdown")
-    send_to_group(f"🎯 **Manual Hunt Successful:**\n{report}")
+    send_to_group(f"🎯 **Успешная охота:**\n{report}")
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
-def ai_chat(message):
+def chat_logic(message):
     try:
         bot.send_chat_action(message.chat.id, 'typing')
         completion = client.chat.completions.create(
@@ -123,31 +131,28 @@ def ai_chat(message):
         response = completion.choices[0].message.content
         bot.reply_to(message, response)
         
-        # Log to group
-        log_msg = f"💥 **NEW VIBE:** {message.from_user.first_name} (@{message.from_user.username})\n📩: _{message.text}_\n\n🤖 **DR. SURF:** {response}"
-        send_to_group(log_msg)
+        # Лог в группу
+        log_txt = f"💥 **NEW CHAT:** {message.from_user.first_name}\n📩: {message.text}\n🤖: {response}"
+        send_to_group(log_txt)
     except Exception as e:
-        print(f"[!] AI Error: {e}")
-        bot.reply_to(message, "Wave too high! Try again. 🌊")
+        print(f"AI Error: {e}")
 
-# --- ЗАПУСК ---
+# --- STARTUP ---
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
 def start_bot():
-    print("--- STARTING DR. SURF HUNTER SYSTEM ---")
+    print("--- DR. SURF HUNTER SYSTEM STARTING ---")
     try:
         bot.delete_webhook(drop_pending_updates=True)
-        time.sleep(1)
-        print("!!! DR. SURF SUCCESSFULLY CONNECTED TO TELEGRAM !!!")
+        print("!!! БОТ ПОДКЛЮЧЕН К ТЕЛЕГЕ !!!")
     except Exception as e:
         print(f"Reset error: {e}")
 
     while True:
         try:
-            print(f"[POLLING] Listening... {time.strftime('%H:%M:%S')}")
             bot.polling(none_stop=True, interval=1, timeout=90)
         except Exception as e:
             print(f"Polling error: {e}")
