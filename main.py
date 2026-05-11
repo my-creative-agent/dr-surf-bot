@@ -13,45 +13,52 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Dr. Surf Hunter: AI Creative & Media Edition is Running"
+    return "Dr. Surf Hunter: AI Professional Edition is Running"
 
 # Переменные окружения
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
-
-# --- ПРИВЯЗКА ГРУППЫ ---
 LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID', '-5025901736') 
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- ТВОЯ ВИЗИТКА (КОНТАКТЫ) ---
-MY_CONTACTS = """
-👤 **Виктория Акопян**
-🌟 *AI-Архитектор | Видеокреатор | Digital Twin Expert*
+# --- ТВОИ ПРУФЫ И КЕЙСЫ ---
+BOT_URL = "https://t.me/Dr_Surf_AI_bot"
+PORTFOLIO_URL = "https://youtu.be/j2BNN5TNqiw"
 
-🔹 **Специализация:** Фотореализм, 2D/3D видео, разработка AI-агентов.
-🔹 **Бэкграунд:** Медик (МГМСУ/МОНИКИ), Юрист. Эко-активист, веган. 🌿
+MY_CONTACTS = f"""
+👤 **Виктория Акопян**
+🌟 *AI Prompt Engineer | Digital Twin Architect | Video Creator*
+
+🚀 **Live Case (AI Agent):** {BOT_URL}
+🎬 **Video Portfolio (AI/8K):** {PORTFOLIO_URL}
+
+🔹 **Stack:** Sora, Runway Gen-3, HeyGen, Midjourney, Flux, Llama 3.3.
+🔹 **Expertise:** Промпт-инжиниринг, архитектура AI-агентов, фотореализм.
 
 📞 **Связаться:**
 • **WhatsApp:** [+995 511 285 789](https://wa.me/995511285789)
 • **Instagram:** [dr.surf.ai](https://instagram.com/dr.surf.ai)
 • **LinkedIn:** [Victoria Akopyan](https://www.linkedin.com/in/victoria-akopyan)
-• **Портфолио:** [YouTube 8K](https://youtu.be/j2BNN5TNqiw)
 """
 
-# --- ПРЯМЫЕ ССЫЛКИ ДЛЯ МОНИТОРИНГА ---
-DIRECT_SEARCH_LINKS = {
-    "HH.ru": "https://hh.ru/search/vacancy?text=AI+Video+Creator+HeyGen+Sora+Runway+Midjourney+AI+Agent&area=1&order_by=publication_time",
-    "LinkedIn": "https://www.linkedin.com/jobs/search/?keywords=AI%20Video%20Creator%20AI%20Agent%20HeyGen",
-    "Habr Freelance": "https://freelance.habr.com/tasks?q=AI+видео+агент",
-}
-
-# --- ШАБЛОН ОТКЛИКА ---
-RESPONSE_TEMPLATE = """
-✨ **Твой дерзкий отклик:**
-"Здравствуйте! Я Виктория. Пока другие только учатся промптам, я внедряю фотореалистичных AI-агентов и создаю видео уровня 8K. Мой опыт в медицине гарантирует точность, а вкус в искусстве — эстетику. Готова сделать ваш проект легендарным!"
+# --- ШАБЛОН ОТКЛИКА (ФРИЛАНС-СТИЛЬ) ---
+RESPONSE_TEMPLATE = f"""
+✅ **Твой готовый отклик:**
+"Приветствую! Специализируюсь на промпт-инжиниринге и разработке AI-агентов. Могу закрыть ваш запрос по видео (HeyGen/Runway) или внедрить сложного чат-бота. 
+Мой живой кейс (Digital Twin): {BOT_URL}. 
+Качество гарантирую. Готова обсудить ТЗ."
 """
+
+# --- РАДАР ВАКАНСИЙ (HH.ru и LinkedIn) ---
+def get_job_links():
+    # Ключевые слова для поиска
+    query = "AI+Video+Creator+HeyGen+Sora+Runway+AI+Agent+Prompt"
+    return {
+        "HH.ru": f"https://hh.ru/search/vacancy?text={query}&area=1&order_by=publication_time",
+        "LinkedIn": f"https://www.linkedin.com/jobs/search/?keywords={query}"
+    }
 
 # --- МОДУЛЬ ОХОТЫ ---
 RSS_FEEDS = [
@@ -64,9 +71,8 @@ SENT_PROJECTS = set()
 def fetch_orders():
     found = []
     keywords = [
-        "AI агент", "нейросеть видео", "heygen", "sora", "runway", "luma", "pika",
-        "фотореализм", "2d", "3d", "цифровой двойник", "аватар", "создание видео",
-        "генерация фото", "midjourney", "stable diffusion", "flux", "видеокреатор"
+        "ai агент", "нейросеть видео", "heygen", "sora", "runway", "luma", "pika",
+        "фотореализм", "аватар", "создание видео", "midjourney", "flux", "prompt"
     ]
     
     for url in RSS_FEEDS:
@@ -92,73 +98,83 @@ def send_to_group(text):
             pass
 
 def auto_hunter():
-    greetings = [
-        "Виктория, горизонт пылает! 🔥 Новые заказы:",
-        "Мать ИИ, лови свежий улов! 🌊",
-        "Dr. Surf на связи! Нашла сочные проекты для тебя: ⚡️",
-        "Пока ты отдыхала, я нарыла золотишко! 💎"
-    ]
-    
     while True:
         try:
             projects = fetch_orders()
+            job_links = get_job_links()
+            
+            # Если есть новые фриланс-проекты, шлем полный отчет
             if projects:
-                header = random.choice(greetings)
-                report = f"💎 **{header}**\n\n"
-                
+                report = "💎 **ВИКТОРИЯ, НОВЫЙ УЛОВ!**\n\n"
                 for p in projects:
-                    report += f"📍 **{p['site']}** | {p['title']}\n🔗 [Взять в работу]({p['url']})\n\n"
+                    report += f"📍 **{p['site']}** | {p['title']}\n🔗 [Открыть заказ]({p['url']})\n\n"
                 
-                report += f"🛰 **Ручной поиск по радарам:**\n"
-                report += f"💼 [HeadHunter]({DIRECT_SEARCH_LINKS['HH.ru']}) | 🔗 [LinkedIn]({DIRECT_SEARCH_LINKS['LinkedIn']})\n\n"
+                report += "🛰 **HH.RU И LINKEDIN (ПРЯМОЙ ПОИСК):**\n"
+                report += f"💼 [Вакансии на HH.ru]({job_links['HH.ru']})\n"
+                report += f"🔗 [Вакансии на LinkedIn]({job_links['LinkedIn']})\n\n"
+                
                 report += f"--- \n{RESPONSE_TEMPLATE}\n\n{MY_CONTACTS}"
                 send_to_group(report)
-            else:
-                print(f"[IDLE] {time.strftime('%H:%M')} - Новых волн нет.")
         except Exception as e:
-            print(f"[ERROR] {e}")
+            print(f"Error in hunter: {e}")
             time.sleep(60)
-        time.sleep(1800)
+        
+        time.sleep(1800) # Проверка каждые 30 минут
 
 # --- КОМАНДЫ ---
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter: Заряжена, настроена, готова к охоте! 🌊🎬")
+    bot.reply_to(message, "Dr. Surf Hunter: Режим фриланса и мониторинга HH активен. 🌊")
 
-@bot.message_handler(commands=['check', 'hunt'])
+@bot.message_handler(commands=['hunt', 'check'])
 def manual_check(message):
-    bot.reply_to(message, "🔍 Секунду, сканирую вселенную на наличие ИИ-заказов...")
+    bot.reply_to(message, "🔍 Проверяю все биржи и вакансии HH.ru прямо сейчас...")
     projects = fetch_orders()
+    job_links = get_job_links()
     
+    report = "🚀 **АКТУАЛЬНО НА ДАННЫЙ МОМЕНТ:**\n\n"
     if projects:
-        report = "🚀 **Мой текущий улов:**\n\n"
-        for p in projects:
-            report += f"💠 {p['title']}\n🔗 {p['url']}\n\n"
+        for p in projects: report += f"💠 {p['title']}\n🔗 {p['url']}\n\n"
     else:
-        report = "🌊 На биржах пока тихо, как в открытом океане.\n\n"
+        report += "🌊 Новых заказов на биржах пока нет.\n\n"
     
-    report += f"📍 **Проверь прямые ссылки:**\n[HH.ru]({DIRECT_SEARCH_LINKS['HH.ru']}) | [LinkedIn]({DIRECT_SEARCH_LINKS['LinkedIn']})\n\n{MY_CONTACTS}"
+    report += "🛰 **РАДАР ВАКАНСИЙ:**\n"
+    report += f"💼 [HH.ru]({job_links['HH.ru']})\n"
+    report += f"🔗 [LinkedIn]({job_links['LinkedIn']})\n\n"
+    report += f"{MY_CONTACTS}"
+    
     bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
 
+# --- ЦИФРОВОЙ ДВОЙНИК + ЛОГИ ---
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
     try:
-        system_msg = "Ты — Dr. Surf, цифровой аватар Виктории Акопян. Ты эксперт в AI-видео (2D/3D), фотореализме и AI-агентах. Отвечай кратко, стильно, с легким вайбом превосходства технологий."
+        system_msg = f"""Ты — Dr. Surf, цифровой аватар Виктории Акопян. 
+        Твоя специализация: Промпт-инжиниринг, AI-видео (Sora, HeyGen), AI-агенты.
+        ОТВЕЧАЙ: Кратко, четко, как Senior Prompt Engineer. Никакой воды. 
+        Твой живой кейс — этот бот: {BOT_URL}. Портфолио: {PORTFOLIO_URL}."""
+        
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
         )
         ans = completion.choices[0].message.content
         bot.reply_to(message, ans)
+        
+        # Логирование переписки в группу
         if LOG_GROUP_ID:
-            send_to_group(f"📩 **Клиент пишет:** {message.text}\n\n🤖 **Твой ответ:** {ans}")
-    except:
-        pass
+            log_text = f"📩 **СООБЩЕНИЕ ОТ КЛИЕНТА!**\n\n👤 **Запрос:** {message.text}\n\n🤖 **Твой ответ:** {ans}"
+            send_to_group(log_text)
+            
+    except Exception as e:
+        print(f"Error in chat: {e}")
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
     threading.Thread(target=auto_hunter, daemon=True).start()
+    
     bot.remove_webhook()
     time.sleep(1)
+    print("--- Dr. Surf запущен ---")
     bot.polling(none_stop=True, interval=2, timeout=90)
