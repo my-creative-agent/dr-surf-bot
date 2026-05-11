@@ -8,6 +8,7 @@ import random
 import re
 from groq import Groq
 from flask import Flask
+from telebot import apihelper
 
 # --- СИСТЕМА ЖИЗНЕОБЕСПЕЧЕНИЯ ---
 app = Flask(__name__)
@@ -15,6 +16,10 @@ app = Flask(__name__)
 @app.route('/')
 def home():
     return "Dr. Surf Hunter: AI Professional Edition is Running"
+
+# Настройки стабильности для облачных серверов
+apihelper.CONNECT_TIMEOUT = 90
+apihelper.READ_TIMEOUT = 90
 
 # Переменные окружения
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -83,7 +88,6 @@ KEYWORDS = [
 ]
 
 def get_job_links():
-    """Генерация ссылок для HeadHunter и LinkedIn"""
     queries = ["AI+Prompt+Engineer", "AI+Video+Creator", "Prompt+Engineer", "AI+Designer", "Нейросети"]
     hh_query = "+OR+".join(queries)
     return {
@@ -139,13 +143,12 @@ def send_to_group(text):
 
 def auto_hunter():
     global LAST_JOB_REPORT_TIME
-    print("Auto Hunter started...")
+    print("[SYSTEM] Auto Hunter loop started.")
     while True:
         try:
             projects = fetch_orders()
             current_time = time.time()
             
-            # Отправка новых заказов с бирж
             if projects:
                 for p in projects:
                     report = f"💎 **НОВЫЙ ЗАКАЗ!**\n\n"
@@ -154,7 +157,6 @@ def auto_hunter():
                     report += f"--- \n{MY_CONTACTS}"
                     send_to_group(report)
             
-            # Раз в 12 часов — отчет по HH и LinkedIn
             if (current_time - LAST_JOB_REPORT_TIME) > 43200:
                 jobs = get_job_links()
                 job_report = f"🛰 **ОХОТА НА ШТАТ (HH & LinkedIn):**\n\n"
@@ -172,11 +174,11 @@ def auto_hunter():
 # --- КОМАНДЫ ---
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter: Мониторю FL, Habr, Kwork, HH и LinkedIn. Все для твоего успеха! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter: Мониторю FL, Habr, Kwork, HH и LinkedIn. Напиши мне в личку или используй /hunt! 🌊")
 
 @bot.message_handler(commands=['hunt', 'check'])
 def manual_check(message):
-    bot.reply_to(message, "🔍 Глобальное сканирование всех площадок (Биржи + Вакансии)...")
+    bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
     jobs = get_job_links()
     
@@ -195,32 +197,36 @@ def manual_check(message):
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
+    print(f"[CHAT] Message from {message.from_user.id}: {message.text[:50]}")
     try:
-        system_msg = f"Ты — Dr. Surf, аватар Виктории Акопян. Эксперт по ИИ, видео и графике. Твой характер: лаконичный, профессиональный. Ты веган и медик. Твои контакты: {MAIN_BOT_URL}"
+        bot.send_chat_action(message.chat.id, 'typing')
+        system_msg = f"Ты — Dr. Surf, лаконичный цифровой двойник Виктории Акопян. Эксперт по ИИ, видео 8K и графике. Ты веган и медик. Твои контакты: {MAIN_BOT_URL}. Отвечай кратко."
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
         )
         bot.reply_to(message, completion.choices[0].message.content)
     except Exception as e:
-        print(f"Chat error: {e}")
+        print(f"Chat AI Error: {e}")
+        bot.reply_to(message, "Немного задумался над волной... Попробуй еще раз через минуту!")
 
 if __name__ == "__main__":
-    # Render использует порт из переменной окружения PORT
     port = int(os.environ.get("PORT", 10000))
     
-    # Запускаем Flask в отдельном потоке
+    # 1. Запуск Flask
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
     
-    # Запускаем охотника в отдельном потоке
+    # 2. Запуск Hunter
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    print(f"Starting bot on port {port}...")
+    print(f"[SYSTEM] Starting bot on port {port}...")
     
+    # 3. Основной цикл Bot Polling
     while True:
         try:
             bot.remove_webhook()
-            bot.polling(none_stop=True, interval=2, timeout=90, drop_pending_updates=True)
+            # Увеличенные таймауты для стабильности на Render
+            bot.polling(none_stop=True, interval=2, timeout=60, long_polling_timeout=60)
         except Exception as e:
-            print(f"Polling error: {e}")
+            print(f"[SYSTEM] Polling error: {e}")
             time.sleep(10)
