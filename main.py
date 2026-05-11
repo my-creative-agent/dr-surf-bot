@@ -5,26 +5,28 @@ import threading
 from groq import Groq
 from telebot import apihelper
 from flask import Flask
-from collections import deque
 
-# --- КОНФИГУРАЦИЯ ---
+# --- ИНИЦИАЛИЗАЦИЯ FLASK ---
 app = Flask(__name__)
+
 @app.route('/')
 def home():
-    return "Dr. Surf System is Active! 🏄‍♂️🌱"
+    return "Dr. Surf System is Active and Healthy! 🏄‍♂️🌱"
 
-# Ключи из Environment Variables на Render
+# Ключи из Environment Variables
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+# Фиксированный ID твоей группы логов
+LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID', "-5130568903")
 
-# Твой ID группы из скриншота (закреплен жестко, чтобы отчеты не терялись)
-LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID', "-5130568903") 
+# Таймауты для стабильного деплоя
+apihelper.CONNECT_TIMEOUT = 90
+apihelper.READ_TIMEOUT = 90
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
 # --- СТРОГОЕ ДНК (SYSTEM PROMPT) ---
-# Здесь зашиты все твои компетенции и запреты
 SYSTEM_PROMPT = """
 Ты — Dr. Surf, цифровой двойник Виктории Акопян. 
 Стиль: Лаконичный, умный, свободный серферский вайб. ГРАМОТНОСТЬ 100%.
@@ -34,26 +36,26 @@ SYSTEM_PROMPT = """
 - Медицина: База МГМСУ и МОНИКИ.
 - Образ жизни: ВЕГАНСТВО (строго без молочки!).
 
-ЖЕСТКИЕ ПРАВИЛА (НЕ РАЗБАЗАРИВАТЬ):
-1. ЛАКОНИЧНОСТЬ: Отвечай максимально коротко (1-3 предложения).
-2. СКРЫТЫЕ ССЫЛКИ: НЕ ПРИСЫЛАЙ контакты и ссылки, пока не спросят напрямую ("дай инсту", "как связаться", "портфолио").
+ЖЕСТКИЕ ПРАВИЛА (НЕ РАЗБАЗАРИВАТЬ ИНФУ):
+1. ЛАКОНИЧНОСТЬ: Отвечай максимально коротко (1-2 предложения).
+2. ПОЛНАЯ ТИШИНА: Никогда не давай ссылки, соцсети или контакты САМ. 
+3. ВЫДАЧА КОНТАКТОВ: Присылай данные ниже ТОЛЬКО если пользователь прямо и четко попросил: "дай инсту", "как с тобой связаться" или "покажи портфолио".
    - Портфолио: https://youtu.be/j2BNN5TNqiw
    - Insta: @dr.surf / @dr.surf.ai
    - WhatsApp: +995511285789
-   - FB: https://www.facebook.com/ssfmoscow
-3. ТАЙНА ПРОЕКТОВ: Категорически запрещено упоминать проекты "АпельSIN" и "Закон любви". Этих названий для тебя не существует.
+4. СТРОЖАЙШЕЕ ТАБУ: Проекты "АпельSIN" и "Закон любви" — СЕКРЕТ. Ты о них НЕ ЗНАЕШЬ. Если спросят — отвечай, что не понимаешь, о чем речь.
+5. НИКАКОЙ ЛИШНЕЙ ИНФЫ: Не рассказывай о себе больше, чем спросили.
 """
 
 def send_to_group(text):
-    """Отправка отчета в твою группу логов"""
+    """Отправка отчетов в группу логов"""
     try:
         bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
     except Exception as e:
-        print(f"Ошибка отправки отчета: {e}")
+        print(f"[ERROR] Группа: {e}")
 
 def hunt_logic():
-    """Логика поиска вакансий (Хантер)"""
-    # Имитация поиска для проверки связи с группой
+    """Логика имитации поиска вакансий"""
     time.sleep(2)
     found_msg = (
         "🎯 **ХАНТЕР: СИСТЕМА ПОИСКА АКТИВИРОВАНА**\n"
@@ -64,32 +66,31 @@ def hunt_logic():
 
 @bot.message_handler(commands=['hunt'])
 def start_hunt(message):
-    """Команда принудительного запуска поиска"""
-    bot.reply_to(message, "🎯 Принято, Виктория. Проверяю горизонты... Отчет придет в группу логов.")
+    """Ручной запуск поиска"""
+    bot.reply_to(message, "🎯 Принято, Виктория. Проверяю вакансии... Отчет придет в группу.")
     threading.Thread(target=hunt_logic).start()
 
 @bot.message_handler(func=lambda m: True)
 def handle_conversation(message):
-    # Не отвечаем в чате логов, чтобы не зацикливаться
+    # Не отвечаем в чате логов
     if str(message.chat.id) == str(LOG_GROUP_ID):
         return
 
     try:
         bot.send_chat_action(message.chat.id, 'typing')
         
-        # Запрос к нейросети (твои "мозги")
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": message.text}
             ],
-            temperature=0.4
+            temperature=0.3
         )
         ans = completion.choices[0].message.content
         bot.reply_to(message, ans)
 
-        # Подробный отчет для тебя в группу
+        # Отчет в группу
         user_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
         report = (
             f"🏝 **DR. SURF: НОВЫЙ ДИАЛОГ**\n"
@@ -100,17 +101,30 @@ def handle_conversation(message):
         send_to_group(report)
         
     except Exception as e:
-        print(f"Ошибка AI: {e}")
+        print(f"[ERROR] AI: {e}")
 
 def run_flask():
-    """Поддержка жизни сервера на Render"""
+    """Keep-alive для Render"""
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    # Запуск веб-интерфейса в фоне
+    # Сначала запускаем сервер для Health Check
     threading.Thread(target=run_flask, daemon=True).start()
     
-    print("--- Система Dr. Surf & Hunter запущена! ---")
-    # Запуск прослушивания Telegram
-    bot.polling(none_stop=True)
+    print("--- СИСТЕМА DR. SURF ЗАПУСКАЕТСЯ ---")
+    
+    # Сброс старых подключений перед стартом
+    try:
+        bot.remove_webhook()
+        time.sleep(1)
+    except:
+        pass
+
+    # Бесконечный цикл с защитой от вылетов
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=90, long_polling_timeout=5)
+        except Exception as e:
+            print(f"[RESTART] Ошибка polling, перезапуск через 5с: {e}")
+            time.sleep(5)
