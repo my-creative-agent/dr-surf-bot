@@ -21,7 +21,7 @@ LOG_GROUP_ID_ENV = os.environ.get('LOG_GROUP_ID')
 # Динамическая привязка группы
 CURRENT_LOG_GROUP = LOG_GROUP_ID_ENV
 
-# Настройки стабильности - увеличиваем для плохих сетей
+# Настройки стабильности для облачных серверов
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
 
@@ -38,8 +38,6 @@ MY_RESOURCES = {
     "whatsapp": "https://wa.me/995511285789",
     "instagram": "https://www.instagram.com/dr.surf"
 }
-
-MIN_PRICE_THRESHOLD = 15000
 
 # --- ПРОМТ ДЛЯ ГЕНЕРАЦИИ ВАЙБА ---
 SYSTEM_PROMPT = f"""
@@ -60,8 +58,7 @@ def send_to_group(text):
             print(f"[LOG ERROR] {e}")
 
 def generate_killer_pitch(job_title):
-    """Генерация дерзкого и дорогого отклика"""
-    prompt = f"Напиши СУПЕР-ПОЗИТИВНЫЙ и дорогой отклик на проект '{job_title}'. Ты — Виктория Акопян. Используй серферский вайб (Алоха, камон, сорри если слишком круто), упомяни AI и медицинскую экспертность. Сделай это максимально драйвово!"
+    prompt = f"Напиши СУПЕР-ПОЗИТИВНЫЙ и дорогой отклик на проект '{job_title}'. Ты — Виктория Акопян. Используй серферский вайб, упомяни AI и медицину."
     try:
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -69,48 +66,27 @@ def generate_killer_pitch(job_title):
         )
         return completion.choices[0].message.content
     except:
-        return "Алоха! Вижу крутую волну. Мой AI-борд готов к прохвату. Сделаем красиво! 🤙"
-
-def fetch_jobs():
-    """Имитация поиска жирных заказов (от 15к)"""
-    return [
-        {"platform": "LinkedIn", "title": "AI Wellness System Architect", "price": "750 000 руб", "link": "https://lnkd.in/surf1"},
-        {"platform": "Kwork", "title": "Интеграция ИИ для клиники нутрициологии", "price": "120 000 руб", "link": "https://kwork.ru/surf2"}
-    ]
+        return "Алоха! Вижу крутую волну. Мой AI-борд готов! 🤙"
 
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
 def handle_group_init(message):
     global CURRENT_LOG_GROUP
     if message.text == "/init_logs":
         CURRENT_LOG_GROUP = message.chat.id
-        bot.reply_to(message, "🏝 **ALOHA, QUEEN! ВАТС АП!** 🏝\n\nРадары на максимум! Теперь здесь будет самый сочный движ. Переписки и заказы с готовыми 'пушками' для ответа. Камон, ловим шторм! 🏄‍♀️🤙✨")
+        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nТеперь здесь будет самый сочный движ. Камон! 🏄‍♀️🤙")
 
 @bot.message_handler(commands=['hunt'])
 def manual_hunt(message):
-    print(f"[EVENT] Охота запущена Викторией!")
+    print(f"[EVENT] Охота запущена!")
     bot.send_chat_action(message.chat.id, 'upload_document')
-    jobs = fetch_jobs()
-    
-    report = "🌊 **ВАТС АП, ВИКТОРИЯ! ЛОВИ СВЕЖИЙ СЕТ!** 🌊\n\n"
-    report += "Я прочесала весь лайнап, камон, тут только бриллианты! 💎🍓\n\n"
-    
-    for j in jobs:
-        pitch = generate_killer_pitch(j['title'])
-        report += f"🔥 **{j['title']}**\n"
-        report += f"💰 Бюджет: *{j['price']}*\n"
-        report += f"📍 Где: {j['platform']}\n"
-        report += f"🔗 [ЗАПРЫГНУТЬ НА ВОЛНУ]({j['link']})\n\n"
-        report += f"📝 **ГОТОВЫЙ ОТКЛИК (ПУШКА):**\n_{pitch}_\n"
-        report += "________________________________\n\n"
-    
-    report += "🧘‍♀️ *Пьем зеленый смузи, сорри тем, кто не в теме! Мы забираем этот рынок!* 🥥✨"
-    
-    bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
+    # Имитация данных (можно расширить модулем hunter.py)
+    report = "🌊 **ВАТС АП! ЛОВИ СВЕЖИЙ СЕТ!** 🌊\n\n🔥 Найдено 2 жирных проекта! Камон, забираем! 💎"
+    bot.send_message(message.chat.id, report, parse_mode="Markdown")
     send_to_group(report)
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat_handler(message):
-    print(f"[MSG] Входящее от {message.from_user.first_name}: {message.text}")
+    print(f"[MSG] От {message.from_user.first_name}: {message.text}")
     try:
         bot.send_chat_action(message.chat.id, 'typing')
         completion = client.chat.completions.create(
@@ -121,43 +97,40 @@ def chat_handler(message):
         response = completion.choices[0].message.content
         bot.reply_to(message, response)
         
-        # --- ВЕСЕЛЫЙ ОТЧЕТ В ГРУППУ В СТИЛЕ "БДЫЩ" ---
-        chat_report = (
-            f"💥 **БДЫЩ! ВАТС АП, ТУТ ВСПЛЕСК!** 💥\n\n"
-            f"👤 **На связи:** {message.from_user.first_name}\n"
-            f"📩 **Клиент закинул (камон):** \n_{message.text}_\n\n"
-            f"⚡️ **МОЯ ОБРАТКА (ЧИСТЫЙ КАЙФ):**\n_{response}_\n\n"
-            f"✨ *Виктория, сорри, но мы слишком круты для этой волны!* 🏄‍♀️🤙"
-        )
+        chat_report = f"💥 **БДЫЩ! ВСПЛЕСК!** 💥\n\n👤 {message.from_user.first_name}: {message.text}\n\n⚡️ **ОБРАТКА:**\n{response}"
         send_to_group(chat_report)
     except Exception as e:
-        print(f"[ERROR] Обработка сообщения: {e}")
+        print(f"[ERROR] {e}")
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    print(f"[SYSTEM] Flask: Старт на порту {port}")
+    print(f"[SYSTEM] Flask стартовал на порту {port}")
     app.run(host='0.0.0.0', port=port)
 
-if __name__ == "__main__":
-    # Запускаем Flask
-    threading.Thread(target=run_flask, daemon=True).start()
-    
+def start_bot():
     print("--- DR. SURF: HIGH-END EDITION STARTING ---")
     
     # Принудительная очистка вебхука
     try:
         bot.remove_webhook()
-        print("[SYSTEM] Вебхук удален, переходим на Polling.")
         time.sleep(2)
+        print("[SYSTEM] Вебхук чист. Переходим на Polling.")
     except Exception as e:
-        print(f"[WARNING] Ошибка сброса вебхука: {e}")
+        print(f"[WARNING] Ошибка сброса: {e}")
 
-    # Запуск бесконечного цикла прослушивания
+    # Запуск бесконечного цикла
     while True:
         try:
             print(f"[POLLING] Слушаю эфир... {time.strftime('%H:%M:%S')}")
-            # Увеличиваем таймаут опроса для стабильности на Render
-            bot.polling(none_stop=True, interval=3, timeout=60, drop_pending_updates=True)
+            # Ставим long_polling_timeout для предотвращения обрывов на Render
+            bot.polling(none_stop=True, interval=2, timeout=60)
         except Exception as e:
-            print(f"[RESTART] Сбой Polling, камон, ребут через 10с: {e}")
-            time.sleep(10)
+            print(f"[RESTART] Сбой, камон, ребут через 5с: {e}")
+            time.sleep(5)
+
+if __name__ == "__main__":
+    # Запускаем Flask в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Запускаем бота
