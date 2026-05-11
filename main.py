@@ -79,12 +79,20 @@ KEYWORDS = [
 
 SENT_PROJECTS = set() 
 
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+]
+
 def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
-    """Специальный модуль для HeadHunter через API с защитой от блокировок"""
+    """Специальный модуль для HeadHunter с маскировкой под браузер"""
     try:
+        # Используем API HH с передачей необходимых заголовков
         url = f"https://api.hh.ru/vacancies?text={query}&area=1&per_page={limit}"
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+            'User-Agent': random.choice(USER_AGENTS),
+            'Accept': 'application/json'
         }
         response = requests.get(url, headers=headers, timeout=15)
         if response.status_code == 200:
@@ -94,7 +102,10 @@ def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
                 salary = "По договоренности"
                 if item.get('salary'):
                     s = item['salary']
-                    salary = f"от {s.get('from')} {s.get('currency')}"
+                    val_from = s.get('from') if s.get('from') else ""
+                    val_to = s.get('to') if s.get('to') else ""
+                    salary = f"{val_from}-{val_to} {s.get('currency')}"
+                
                 vacs.append({
                     "title": item['name'],
                     "url": item['alternate_url'],
@@ -123,19 +134,15 @@ def get_best_template(title):
 
 def fetch_orders(ignore_history=False):
     found = []
-    # 1. Сбор с RSS (FL, Habr, Kwork, Freelance.ru)
+    # 1. RSS Сбор (Freelance биржи)
     for feed_info in RSS_FEEDS:
         try:
-            # Улучшенные заголовки для обхода блокировок на Kwork/Habr
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36',
-                'Accept': 'application/rss+xml, application/xml;q=0.9, */*;q=0.8'
-            }
-            response = requests.get(feed_info["url"], headers=headers, timeout=15)
-            # Принудительная расшифровка контента для корректного парсинга
-            feed = feedparser.parse(response.content if response.status_code == 200 else response.text)
+            time.sleep(random.uniform(1, 3))
+            headers = {'User-Agent': random.choice(USER_AGENTS)}
+            response = requests.get(feed_info["url"], headers=headers, timeout=20)
+            feed = feedparser.parse(response.content)
             
-            for entry in feed.entries[:25]:
+            for entry in feed.entries[:20]:
                 content = (entry.title + getattr(entry, 'description', '')).lower()
                 if any(word in content for word in KEYWORDS):
                     if ignore_history or (entry.link not in SENT_PROJECTS):
@@ -150,9 +157,9 @@ def fetch_orders(ignore_history=False):
         except Exception as e: 
             print(f"Error fetching {feed_info['name']}: {e}")
     
-    # 2. Сбор с HeadHunter
-    hh_results = fetch_hh_vacancies()
-    for v in hh_results:
+    # 2. HH.ru Сбор
+    hh_vacs = fetch_hh_vacancies()
+    for v in hh_vacs:
         if ignore_history or (v['url'] not in SENT_PROJECTS):
             found.append(v)
             if not ignore_history: SENT_PROJECTS.add(v['url'])
@@ -165,8 +172,7 @@ def send_to_group(text):
         except Exception as e: print(f"Log Error: {e}", flush=True)
 
 def auto_hunter():
-    """Фоновый процесс автоматического мониторинга всех источников"""
-    print("[HUNTER] Автоматический мониторинг запущен", flush=True)
+    print("[HUNTER] Авто-поиск (включая HH) запущен", flush=True)
     while True:
         try:
             projects = fetch_orders()
@@ -174,72 +180,45 @@ def auto_hunter():
                 for p in projects:
                     msg = f"💎 **НОВЫЙ ЗАКАЗ!**\n\n📍 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Открыть заказ]({p['url']})\n\n📝 **ОТКЛИК:**\n{p['offer']}\n\n{MY_CONTACTS}"
                     send_to_group(msg)
-                    time.sleep(3)
+                    time.sleep(5)
         except Exception as e: 
             print(f"Hunter Error: {e}", flush=True)
-        
-        # Проверка каждые 15 минут для большей оперативности
-        time.sleep(900)
+        time.sleep(1200) # 20 минут
 
 # --- ОБРАБОТКА КОМАНД ---
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter онлайн! Используй /check для ручного поиска. Я автоматически проверяю все биржи и HH каждые 15 минут! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter: Охота на HH и биржи активна! Используй /check для проверки.")
 
 @bot.message_handler(commands=['check'])
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
-    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (ВСЕ ПЛОЩАДКИ):**\n\n"
+    report = "🎯 **ПОСЛЕДНИЕ НАХОДКИ (Биржи + HH):**\n\n"
     if projects:
-        # Сортируем так, чтобы разные площадки перемешивались
-        random.shuffle(projects)
         for p in projects[:15]:
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
     else:
-        report += "🌊 Пока горизонт чист. Попробуй позже!\n"
+        report += "🌊 Пока горизонт чист.\n"
     
     report += f"\n{MY_CONTACTS}"
     bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
 
-@bot.message_handler(func=lambda m: m.chat.type == 'private')
-def chat(message):
-    try:
-        bot.send_chat_action(message.chat.id, 'typing')
-        system_msg = f"Ты — Dr. Surf, цифровой двойник Виктории Акопян (AI эксперт, веган). Контакты: Insta: {INSTAGRAM_URL}, FB: {FACEBOOK_URL}, YT: {PORTFOLIO_URL}. Отвечай коротко."
-        
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
-        )
-        ai_response = completion.choices[0].message.content
-        bot.reply_to(message, ai_response)
-        
-        anon_id = str(message.from_user.id)[-4:]
-        log_msg = f"💬 **ЧАТ (...{anon_id})**\n👤: {message.text}\n🤖: {ai_response}"
-        send_to_group(log_msg)
-        
-    except Exception as e:
-        print(f"AI Error: {e}", flush=True)
-        bot.reply_to(message, "Ошибка AI.")
-
 # --- ЗАПУСК ---
 
 def run_bot():
-    print("[BOT] Запуск основного процесса Telegram...", flush=True)
     while True:
         try:
             bot.remove_webhook()
             bot.infinity_polling(timeout=60, long_polling_timeout=30)
         except Exception as e:
-            print(f"[BOT] Ошибка: {e}. Рестарт через 5 сек...", flush=True)
+            print(f"[RESTART] {e}")
             time.sleep(5)
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    print("[SYSTEM] Запуск Flask сервера на порту 10000...", flush=True)
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
