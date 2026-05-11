@@ -65,26 +65,29 @@ OFFER_TEMPLATES = {
 
 # --- МОНИТОРИНГ БИРЖ ---
 RSS_FEEDS = [
-    "https://www.fl.ru/rss/all.xml",
-    "https://freelance.habr.com/tasks.rss",
-    "https://kwork.ru/rss/projects.xml",
-    "https://freelance.ru/rss/feed/list.rss"
+    {"url": "https://www.fl.ru/rss/all.xml", "name": "🚀 FL"},
+    {"url": "https://freelance.habr.com/tasks.rss", "name": "👨‍💻 Habr"},
+    {"url": "https://freelance.ru/rss/feed/list.rss", "name": "🛠 Freelance.ru"},
+    {"url": "https://kwork.ru/rss/projects.xml", "name": "🎨 Kwork"}
 ]
 
 KEYWORDS = [
     "ai", "ии", "нейросеть", "дизайн", "лого", "логотип", "графика", 
     "иллюстрация", "рисунок", "midjourney", "flux", "stable diffusion",
-    "видео", "video", "prompt", "бот", "bot", "агент", "agent"
+    "видео", "video", "prompt", "бот", "bot", "агент", "agent", "gpt"
 ]
 
 SENT_PROJECTS = set() 
 
 def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
-    """Специальный модуль для HeadHunter через API"""
+    """Специальный модуль для HeadHunter через API с защитой от блокировок"""
     try:
         url = f"https://api.hh.ru/vacancies?text={query}&area=1&per_page={limit}"
-        headers = {'User-Agent': 'DrSurfHunter/1.0 (victoria@example.com)'}
-        response = requests.get(url, headers=headers)
+        # Имитируем реальный браузер для HH
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=15)
         if response.status_code == 200:
             data = response.json()
             vacs = []
@@ -101,7 +104,8 @@ def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
                     "offer": OFFER_TEMPLATES["ai_agent"].format(bot_url=MAIN_BOT_URL)
                 })
             return vacs
-    except: pass
+    except Exception as e:
+        print(f"HH Error: {e}")
     return []
 
 def extract_price(entry):
@@ -120,26 +124,29 @@ def get_best_template(title):
 
 def fetch_orders(ignore_history=False):
     found = []
-    # 1. Сбор с RSS
-    for url in RSS_FEEDS:
+    # 1. Сбор с RSS (FL, Habr, Kwork)
+    for feed_info in RSS_FEEDS:
         try:
-            feed = feedparser.parse(url)
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(feed_info["url"], headers=headers, timeout=15)
+            feed = feedparser.parse(response.content)
+            
             for entry in feed.entries[:20]:
                 content = (entry.title + getattr(entry, 'description', '')).lower()
                 if any(word in content for word in KEYWORDS):
                     if ignore_history or (entry.link not in SENT_PROJECTS):
-                        site = "🚀 FL" if "fl.ru" in url else "🎨 KWORK" if "kwork" in url else "👨‍💻 HABR"
                         found.append({
                             "title": entry.title, 
                             "url": entry.link, 
-                            "site": site,
+                            "site": feed_info["name"],
                             "price": extract_price(entry), 
                             "offer": get_best_template(entry.title)
                         })
                         if not ignore_history: SENT_PROJECTS.add(entry.link)
-        except: pass
+        except Exception as e: 
+            print(f"Error fetching {feed_info['name']}: {e}")
     
-    # 2. Сбор с HH.ru
+    # 2. Сбор с HeadHunter (Критически важно!)
     hh_results = fetch_hh_vacancies()
     for v in hh_results:
         if ignore_history or (v['url'] not in SENT_PROJECTS):
@@ -164,21 +171,21 @@ def auto_hunter():
                     send_to_group(msg)
         except Exception as e: 
             print(f"Hunter Error: {e}", flush=True)
-        time.sleep(1200)
+        time.sleep(1200) # Проверка каждые 20 минут
 
 # --- ОБРАБОТКА КОМАНД ---
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter онлайн! Используй /check для поиска заказов. Я слежу за биржами 24/7! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter онлайн! Используй /check для поиска заказов. Я слежу за биржами и HH 24/7! 🌊")
 
 @bot.message_handler(commands=['check'])
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
-    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ:**\n\n"
+    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (ВКЛЮЧАЯ HH):**\n\n"
     if projects:
-        for p in projects[:10]:
+        for p in projects[:15]:
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
     else:
         report += "🌊 Пока горизонт чист. Попробуй позже!\n"
