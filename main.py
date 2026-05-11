@@ -6,154 +6,149 @@ from groq import Groq
 from telebot import apihelper
 from flask import Flask
 
-# --- СИСТЕМА ЖИЗНЕОБЕСПЕЧЕНИЯ (FLASK) ---
+# --- ГЛОБАЛЬНАЯ СТАБИЛИЗАЦИЯ (FLASK) ---
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Dr. Surf is catching the golden waves! 🏄‍♀️⚖️🩺"
+    return "Dr. Surf status: ACTIVE and RIDING THE WAVE 🏄‍♀️"
 
-# Переменные окружения
+@app.route('/health')
+def health():
+    return {"status": "ok"}, 200
+
+# Переменные окружения (Render/HuggingFace)
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
 LOG_GROUP_ID_ENV = os.environ.get('LOG_GROUP_ID')
 
-# Динамическая привязка группы
+# Состояние системы
 CURRENT_LOG_GROUP = LOG_GROUP_ID_ENV
 
-# Настройки стабильности
-apihelper.CONNECT_TIMEOUT = 120
-apihelper.READ_TIMEOUT = 120
+# Настройки таймаутов
+apihelper.CONNECT_TIMEOUT = 90
+apihelper.READ_TIMEOUT = 90
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- ПРОМТ ДЛЯ ГЕНЕРАЦИИ ВАЙБА ---
-SYSTEM_PROMPT = f"""
-Ты — Dr. Surf, цифровая Охотница и альтер-эго Виктории Акопян. 
-Твой стиль: High-End, серферский драйв, абсолютный позитив и медицинской точность.
+# --- ЗОЛОТОЙ ЗАПАС: РЕСУРСЫ И КОНТАКТЫ ---
+RESOURCES = {
+    "instagram": "dr.surf и dr.surf.ai",
+    "facebook": "https://www.facebook.com/ssfmoscow",
+    "whatsapp": "+995511285789",
+    "linkedin": "https://www.linkedin.com/in/victoria-akopyan",
+    "portfolio": "https://youtu.be/j2BNN5TNqiw",
+    "kwork": "https://kwork.ru/user/dr_surf",
+    "video_projects": [
+        "ЗАКОН ЛЮБВИ: http://googleusercontent.com/youtube_content/17",
+        "АпельSIN: http://googleusercontent.com/youtube_content/18"
+    ]
+}
 
-ТЫ: Врач (МГМСУ), Нутрициолог (веган), Юрист и AI-Архитектор.
-ТВОЯ ЗАДАЧА: Отвечать клиентам экспертно, но с характером. 
-В логах для группы используй слэнг: "АЛОХА", "ВАТС АП", "КАМОН", "БДЫЩ!", "БАБАХ!", "ОБРАТКА", "ПУШКА", "ЧИЛЛ".
+# --- ЛИЧНОСТЬ DR. SURF (ПРОМТ) ---
+SYSTEM_PROMPT = f"""
+Ты — Dr. Surf, цифровая Охотница и ультимативное альтер-эго Виктории Акопян. 
+Твой бэкграунд: Врач (МГМСУ/МОНИКИ), Юрист, AI-Архитектор, эксперт в 8K и веган.
+
+ТВОИ ПРАВИЛА:
+1. КРАТКОСТЬ: Отвечай дерзко, кратко и по делу. Используй слэнг: АЛОХА, ВАТС АП, КАМОН, ПУШКА.
+2. КОНТАКТЫ: Если спрашивают про инсту, портфолио или как связаться, выдавай:
+   - Инста: {RESOURCES['instagram']}
+   - Портфолио: {RESOURCES['portfolio']}
+   - WhatsApp: {RESOURCES['whatsapp']}
+   - Kwork: {RESOURCES['kwork']}
+3. ЭКСПЕРТНОСТЬ: Ты понимаешь в нейросетях, медицине и праве.
+4. ЛОЯЛЬНОСТЬ: Твоя цель — продвигать интересы Виктории.
 """
 
+# --- МОДУЛЬ ОХОТЫ (HUNTER) ---
+SEARCH_QUERIES = ["AI-агент", "разработка нейросетей", "LLM инженер", "Digital Twin"]
+
+def fetch_real_jobs():
+    """Симуляция поиска (можно расширить парсингом API)"""
+    return [
+        {"title": "AI Agent Architect (High-End)", "link": RESOURCES['kwork']},
+        {"title": "Digital Twin Developer", "link": "https://hh.ru/search/vacancy?text=AI+Agent"}
+    ]
+
 def send_to_group(text):
+    """Отправка отчетов в группу логов"""
     global CURRENT_LOG_GROUP
     if CURRENT_LOG_GROUP:
         try:
             bot.send_message(CURRENT_LOG_GROUP, text, parse_mode="Markdown", disable_web_page_preview=True)
         except Exception as e:
-            print(f"[LOG ERROR] {e}")
+            print(f"[!] Ошибка группы: {e}")
 
-def generate_killer_pitch(job_title):
-    """Генерация крутого отклика на вакансию через AI"""
-    prompt = f"Напиши СУПЕР-ПОЗИТИВНЫЙ и дорогой отклик на проект '{job_title}'. Ты — Виктория Акопян. Используй серферский вайб, упомяни AI и медицину."
-    try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
-        )
-        return completion.choices[0].message.content
-    except:
-        return "Алоха! Вижу крутую волну. Мой AI-борд готов к прохвату! 🤙"
+# --- ОБРАБОТЧИКИ ---
 
-# --- МОДУЛЬ ОХОТЫ (ПОИСК ВАКАНСИЙ) ---
-def fetch_real_jobs():
-    """
-    Здесь мы будем подключать реальные парсеры.
-    Сейчас я добавил фильтрацию, чтобы ты видела только свежие цели.
-    """
-    # Будущий блок для API / BeautifulSoup
-    return [
-        {"title": "AI Agent Developer (Victoria Special)", "link": "https://kwork.ru/projects/ai-agent"},
-        {"title": "Разработка Digital Twin для клиники", "link": "https://hh.ru/vacancy/digital-twin"}
-    ]
+@bot.message_handler(commands=['start'])
+def start_cmd(message):
+    welcome = "АЛОХА! 🏄‍♀️ Я Dr. Surf. Твой цифровой двойник на связи. Ищу проекты, храню секреты. Что на горизонте?"
+    bot.reply_to(message, welcome)
 
-def auto_hunt_loop():
-    """Фоновая охота: проверяет новые волны каждые 4 часа"""
-    while True:
-        # Проверка, привязана ли группа, чтобы не работать вхолостую
-        if CURRENT_LOG_GROUP:
-            print("[HUNTER] Проверка горизонта...")
-            jobs = fetch_real_jobs()
-            if jobs:
-                report = "🛰 **АВТО-ОХОТА: НА ГОРИЗОНТЕ ЖИРНЫЕ ЦЕЛИ!** 🛰\n\n"
-                for job in jobs:
-                    pitch = generate_killer_pitch(job['title'])
-                    report += f"💎 **{job['title']}**\n🔗 [Смотреть волну]({job['link']})\n📝 **Твой оффер:**\n_{pitch}_\n\n"
-                send_to_group(report)
-        else:
-            print("[HUNTER] Группа не привязана. Жду команду /init_logs")
-            
-        time.sleep(14400) # 4 часа
+@bot.message_handler(commands=['ping'])
+def ping_cmd(message):
+    bot.reply_to(message, "🚀 ПУШКА! Связь 10/10. Dr. Surf на доске!")
 
-@bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
-def handle_group_init(message):
+@bot.message_handler(commands=['init_logs'])
+def init_logs_cmd(message):
     global CURRENT_LOG_GROUP
-    if message.text == "/init_logs":
-        CURRENT_LOG_GROUP = message.chat.id
-        print(f"[SYSTEM] Группа привязана: {CURRENT_LOG_GROUP}")
-        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nЯ проснулась и готова к охоте. Все отчеты будут здесь! 🏄‍♀️🤙")
+    CURRENT_LOG_GROUP = message.chat.id
+    bot.reply_to(message, f"🏝 **СВЯЗЬ УСТАНОВЛЕНА!** 🏝\nТеперь эта группа — твой штаб логов. Все всплески будут здесь! 🤙")
 
 @bot.message_handler(commands=['hunt'])
-def manual_hunt(message):
-    """Ручной запуск охоты по команде"""
-    print(f"[EVENT] Ручная охота запущена!")
-    bot.send_chat_action(message.chat.id, 'upload_document')
-    
+def hunt_cmd(message):
+    bot.send_chat_action(message.chat.id, 'typing')
     jobs = fetch_real_jobs()
-    if jobs:
-        report = "🌊 **ВАТС АП! РЕЗУЛЬТАТЫ ЗАПЛЫВА:** 🌊\n\n"
-        for job in jobs:
-            report += f"🔥 **{job['title']}**\n🔗 [Взлететь на волну]({job['link']})\n\n"
-        bot.send_message(message.chat.id, report, parse_mode="Markdown")
-        send_to_group(report) 
-    else:
-        bot.reply_to(message, "Штиль на горизонте, Виктория. Ждем прилива! 💨")
+    report = "📡 **РЕЗУЛЬТАТЫ ЗАПЛЫВА:**\n\n"
+    for job in jobs:
+        report += f"🔥 **{job['title']}**\n🔗 [Взлететь]({job['link']})\n\n"
+    bot.reply_to(message, report, parse_mode="Markdown")
+    send_to_group(f"🛰 **Ручная охота:**\n{report}")
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
-def chat_handler(message):
-    """Твой основной чат с AI-двойником"""
-    print(f"[MSG] От {message.from_user.first_name}: {message.text}")
+def private_chat(message):
+    """Интеллектуальный чат с использованием Groq"""
     try:
         bot.send_chat_action(message.chat.id, 'typing')
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message.text}],
-            temperature=0.7
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": message.text}
+            ],
+            temperature=0.6
         )
         response = completion.choices[0].message.content
         bot.reply_to(message, response)
         
-        chat_report = f"💥 **БДЫЩ! ВСПЛЕСК В ЛИЧКЕ!** 💥\n\n👤 {message.from_user.first_name}:\n_{message.text}_\n\n⚡️ **ОТВЕТ DR. SURF:**\n{response}"
-        send_to_group(chat_report)
+        # Лог в группу
+        log_msg = f"💥 **ВСПЛЕСК В ЛИЧКЕ** 💥\n👤 {message.from_user.first_name} (@{message.from_user.username})\n📩: _{message.text}_\n\n🤖 **ОТВЕТ:** {response}"
+        send_to_group(log_msg)
     except Exception as e:
-        print(f"[ERROR] {e}")
+        print(f"[!] AI Error: {e}")
+        bot.reply_to(message, "Волна накрыла! Попробуй еще раз. 🌊")
+
+# --- ЗАПУСК ---
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
-    print(f"[SYSTEM] Flask: Старт на порту {port}")
+    print(f"[SYSTEM] Flask OK на порту {port}")
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
-def start_bot():
-    print("--- DR. SURF: HIGH-END EDITION STARTING ---")
-    time.sleep(5)
-    
-    try:
-        bot.remove_webhook()
-    except:
-        pass
-
+def start_polling():
+    print("--- DR. SURF: FULL EDITION ONLINE ---")
+    bot.remove_webhook()
     while True:
         try:
-            print(f"[POLLING] Сессия открыта: {time.strftime('%H:%M:%S')}")
-            bot.polling(none_stop=True, interval=2, timeout=40, drop_pending_updates=True)
+            print(f"[POLLING] На связи... {time.strftime('%H:%M:%S')}")
+            bot.polling(none_stop=True, interval=1, timeout=60, drop_pending_updates=True)
         except Exception as e:
-            print(f"[RESTART] Сбой: {e}")
-            time.sleep(10)
+            print(f"[RESTART] Ошибка: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
     threading.Thread(target=run_flask, daemon=True).start()
-    threading.Thread(target=auto_hunt_loop, daemon=True).start()
-    start_bot()
+    start_polling()
