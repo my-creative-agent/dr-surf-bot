@@ -226,4 +226,4 @@ if __name__ == "__main__":
     
     print("[SYSTEM] Запуск Flask сервера на порту 10000...", flush=True)
     port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port
+    app.run(host='0.0.0.0', port=port)
