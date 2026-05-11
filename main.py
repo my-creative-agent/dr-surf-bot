@@ -28,17 +28,6 @@ apihelper.READ_TIMEOUT = 120
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
 
-# --- БАЗА ЗНАНИЙ И ССЫЛКИ ---
-MY_RESOURCES = {
-    "ai_agent_bot": "https://t.me/Dr_Surf_AI_bot",
-    "portfolio": "https://youtu.be/j2BNN5TNqiw",
-    "kwork": "https://kwork.ru/user/dr_surf",
-    "linkedin": "https://www.linkedin.com/in/victoria-akopyan",
-    "facebook": "https://www.facebook.com/ssfmoscow",
-    "whatsapp": "https://wa.me/995511285789",
-    "instagram": "https://www.instagram.com/dr.surf"
-}
-
 # --- ПРОМТ ДЛЯ ГЕНЕРАЦИИ ВАЙБА ---
 SYSTEM_PROMPT = f"""
 Ты — Dr. Surf, цифровая Охотница и альтер-эго Виктории Акопян. 
@@ -58,6 +47,7 @@ def send_to_group(text):
             print(f"[LOG ERROR] {e}")
 
 def generate_killer_pitch(job_title):
+    """Генерация крутого отклика на вакансию через AI"""
     prompt = f"Напиши СУПЕР-ПОЗИТИВНЫЙ и дорогой отклик на проект '{job_title}'. Ты — Виктория Акопян. Используй серферский вайб, упомяни AI и медицину."
     try:
         completion = client.chat.completions.create(
@@ -66,7 +56,30 @@ def generate_killer_pitch(job_title):
         )
         return completion.choices[0].message.content
     except:
-        return "Алоха! Вижу крутую волну. Мой AI-борд готов! 🤙"
+        return "Алоха! Вижу крутую волну. Мой AI-борд готов к прохвату! 🤙"
+
+# --- МОДУЛЬ ОХОТЫ (ПОИСК ВАКАНСИЙ) ---
+def fetch_real_jobs():
+    """Слот для интеграции парсеров. Сейчас возвращает тестовые цели."""
+    # Сюда можно добавить вызовы к API фриланс-бирж или парсинг
+    return [
+        {"title": "AI Agent Developer (Llama Index/LangChain)", "link": "https://kwork.ru/projects/ai-agent"},
+        {"title": "Создание цифрового двойника клиники", "link": "https://hh.ru/vacancy/digital-twin"}
+    ]
+
+def auto_hunt_loop():
+    """Фоновая охота: проверяет новые волны каждые 4 часа"""
+    while True:
+        print("[HUNTER] Проверка горизонта...")
+        jobs = fetch_real_jobs()
+        if jobs and CURRENT_LOG_GROUP:
+            report = "🛰 **АВТО-ОХОТА: НА ГОРИЗОНТЕ ЖИРНЫЕ ЦЕЛИ!** 🛰\n\n"
+            for job in jobs:
+                pitch = generate_killer_pitch(job['title'])
+                report += f"💎 **{job['title']}**\n🔗 [Смотреть волну]({job['link']})\n📝 **Твой оффер:**\n_{pitch}_\n\n"
+            send_to_group(report)
+        # 14400 секунд = 4 часа
+        time.sleep(14400) 
 
 @bot.message_handler(func=lambda m: m.chat.type in ['group', 'supergroup'])
 def handle_group_init(message):
@@ -74,18 +87,27 @@ def handle_group_init(message):
     if message.text == "/init_logs":
         CURRENT_LOG_GROUP = message.chat.id
         print(f"[SYSTEM] Группа привязана: {CURRENT_LOG_GROUP}")
-        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nТеперь я транслирую весь движ сюда. Камон! 🏄‍♀️🤙")
+        bot.reply_to(message, "🏝 **ALOHA, QUEEN!** 🏝\n\nТеперь я транслирую отчеты и найденные вакансии сюда. Камон! 🏄‍♀️🤙")
 
 @bot.message_handler(commands=['hunt'])
 def manual_hunt(message):
-    print(f"[EVENT] Охота запущена!")
+    """Ручной запуск охоты по команде"""
+    print(f"[EVENT] Ручная охота запущена!")
     bot.send_chat_action(message.chat.id, 'upload_document')
-    report = "🌊 **ВАТС АП! ЛОВИ СВЕЖИЙ СЕТ!** 🌊\n\n🔥 Найдено 2 жирных проекта! Камон, забираем! 💎"
-    bot.send_message(message.chat.id, report, parse_mode="Markdown")
-    send_to_group(report)
+    
+    jobs = fetch_real_jobs()
+    if jobs:
+        report = "🌊 **ВАТС АП! РЕЗУЛЬТАТЫ ЗАПЛЫВА:** 🌊\n\n"
+        for job in jobs:
+            report += f"🔥 **{job['title']}**\n🔗 [Взлететь на волну]({job['link']})\n\n"
+        bot.send_message(message.chat.id, report, parse_mode="Markdown")
+        send_to_group(report) # Копия в группу
+    else:
+        bot.reply_to(message, "Штиль на горизонте, Виктория. Ждем прилива! 💨")
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat_handler(message):
+    """Твой основной чат с AI-двойником"""
     print(f"[MSG] От {message.from_user.first_name}: {message.text}")
     try:
         bot.send_chat_action(message.chat.id, 'typing')
@@ -97,7 +119,8 @@ def chat_handler(message):
         response = completion.choices[0].message.content
         bot.reply_to(message, response)
         
-        chat_report = f"💥 **БДЫЩ! ВСПЛЕСК!** 💥\n\n👤 {message.from_user.first_name}: {message.text}\n\n⚡️ **ОБРАТКА:**\n{response}"
+        # Отчет в группу о личном сообщении (как ты и просила)
+        chat_report = f"💥 **БДЫЩ! ВСПЛЕСК В ЛИЧКЕ!** 💥\n\n👤 {message.from_user.first_name}:\n_{message.text}_\n\n⚡️ **ОТВЕТ DR. SURF:**\n{response}"
         send_to_group(chat_report)
     except Exception as e:
         print(f"[ERROR] {e}")
@@ -109,7 +132,6 @@ def run_flask():
 
 def start_bot():
     print("--- DR. SURF: HIGH-END EDITION STARTING ---")
-    
     time.sleep(5)
     
     try:
@@ -121,11 +143,18 @@ def start_bot():
     while True:
         try:
             print(f"[POLLING] Сессия открыта: {time.strftime('%H:%M:%S')}")
-            bot.polling(none_stop=True, interval=2, timeout=40)
+            # drop_pending_updates=True чтобы не спамить старым при рестарте
+            bot.polling(none_stop=True, interval=2, timeout=40, drop_pending_updates=True)
         except Exception as e:
             print(f"[RESTART] Сбой, камон, ребут через 10с: {e}")
             time.sleep(10)
 
 if __name__ == "__main__":
+    # 1. Flask для Render (Анти-сон)
     threading.Thread(target=run_flask, daemon=True).start()
+    
+    # 2. Фоновая авто-охота за вакансиями
+    threading.Thread(target=auto_hunt_loop, daemon=True).start()
+    
+    # 3. Запуск бота (Основной процесс)
     start_bot()
