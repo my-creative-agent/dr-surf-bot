@@ -21,7 +21,7 @@ LOG_GROUP_ID_ENV = os.environ.get('LOG_GROUP_ID')
 # Динамическая привязка группы
 CURRENT_LOG_GROUP = LOG_GROUP_ID_ENV
 
-# Настройки стабильности
+# Настройки стабильности - увеличиваем для плохих сетей
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
 
@@ -87,6 +87,7 @@ def handle_group_init(message):
 
 @bot.message_handler(commands=['hunt'])
 def manual_hunt(message):
+    print(f"[EVENT] Охота запущена Викторией!")
     bot.send_chat_action(message.chat.id, 'upload_document')
     jobs = fetch_jobs()
     
@@ -109,6 +110,7 @@ def manual_hunt(message):
 
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat_handler(message):
+    print(f"[MSG] Входящее от {message.from_user.first_name}: {message.text}")
     try:
         bot.send_chat_action(message.chat.id, 'typing')
         completion = client.chat.completions.create(
@@ -129,34 +131,33 @@ def chat_handler(message):
         )
         send_to_group(chat_report)
     except Exception as e:
-        print(f"[ERROR] {e}")
+        print(f"[ERROR] Обработка сообщения: {e}")
 
 def run_flask():
-    # Render использует порт из переменной окружения PORT, по умолчанию 10000
     port = int(os.environ.get("PORT", 10000))
-    print(f"[SYSTEM] Flask запускается на порту {port}...")
+    print(f"[SYSTEM] Flask: Старт на порту {port}")
     app.run(host='0.0.0.0', port=port)
 
 if __name__ == "__main__":
-    # Запускаем Flask в отдельном потоке
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
+    # Запускаем Flask
+    threading.Thread(target=run_flask, daemon=True).start()
     
     print("--- DR. SURF: HIGH-END EDITION STARTING ---")
     
-    # Сброс вебхука принудительно перед началом polling
+    # Принудительная очистка вебхука
     try:
-        print("[SYSTEM] Сброс вебхука для активации polling...")
         bot.remove_webhook()
-        time.sleep(1)
-        print("[SYSTEM] Вебхук успешно удален.")
+        print("[SYSTEM] Вебхук удален, переходим на Polling.")
+        time.sleep(2)
     except Exception as e:
-        print(f"[WARNING] Не удалось удалить вебхук: {e}")
+        print(f"[WARNING] Ошибка сброса вебхука: {e}")
 
+    # Запуск бесконечного цикла прослушивания
     while True:
         try:
-            print(f"[POLLING] Бот слушает волну... ({time.strftime('%H:%M:%S')})")
-            bot.polling(none_stop=True, interval=2, timeout=90, drop_pending_updates=True)
+            print(f"[POLLING] Слушаю эфир... {time.strftime('%H:%M:%S')}")
+            # Увеличиваем таймаут опроса для стабильности на Render
+            bot.polling(none_stop=True, interval=3, timeout=60, drop_pending_updates=True)
         except Exception as e:
-            print(f"[RESTART] Ошибка polling, камон, переподключаемся через 10 сек: {e}")
+            print(f"[RESTART] Сбой Polling, камон, ребут через 10с: {e}")
             time.sleep(10)
