@@ -17,7 +17,7 @@ app = Flask(__name__)
 def home():
     return "Dr. Surf Hunter: AI Professional Edition is Running"
 
-# Настройки стабильности для облачных серверов
+# Настройки стабильности для облачных серверов (защита от Timeout)
 apihelper.CONNECT_TIMEOUT = 90
 apihelper.READ_TIMEOUT = 90
 
@@ -157,6 +157,7 @@ def auto_hunter():
                     report += f"--- \n{MY_CONTACTS}"
                     send_to_group(report)
             
+            # Раз в 12 часов шлем отчет по вакансиям
             if (current_time - LAST_JOB_REPORT_TIME) > 43200:
                 jobs = get_job_links()
                 job_report = f"🛰 **ОХОТА НА ШТАТ (HH & LinkedIn):**\n\n"
@@ -171,22 +172,27 @@ def auto_hunter():
             time.sleep(60)
         time.sleep(1800) 
 
-# --- КОМАНДЫ ---
+# --- ОБРАБОТКА КОМАНД ---
+
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter: Мониторю FL, Habr, Kwork, HH и LinkedIn. Напиши мне в личку или используй /hunt! 🌊")
+    bot.reply_to(message, "Dr. Surf Hunter: Мониторю FL, Habr, Kwork, HH и LinkedIn. Напиши мне в личку или используй /hunt или /check! 🌊")
 
+# ПРОВЕРКА КОМАНДЫ /CHECK И /HUNT (ОНИ ИДЕНТИЧНЫ)
 @bot.message_handler(commands=['hunt', 'check'])
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
     jobs = get_job_links()
     
-    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ:**\n\n"
+    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ (Ручная проверка):**\n\n"
+    
     if projects:
-        for p in projects[:5]: 
+        for p in projects[:7]: # Берем чуть больше для ручного чека
             report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n"
             report += "━━━━━━━━━━━━━━━━━━\n\n"
+    else:
+        report += "🌊 На биржах пока тихо, подходящих волн не найдено.\n\n"
     
     report += "💼 **ВАКАНСИИ (HH & LinkedIn):**\n"
     report += f"🚀 [HeadHunter Стек]({jobs['HH']})\n"
@@ -195,38 +201,49 @@ def manual_check(message):
     
     bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
 
+# ЧАТ С AI (ЛИЧНЫЕ СООБЩЕНИЯ)
 @bot.message_handler(func=lambda m: m.chat.type == 'private')
 def chat(message):
     print(f"[CHAT] Message from {message.from_user.id}: {message.text[:50]}")
     try:
         bot.send_chat_action(message.chat.id, 'typing')
+        # Промпт цифрового двойника
         system_msg = f"Ты — Dr. Surf, лаконичный цифровой двойник Виктории Акопян. Эксперт по ИИ, видео 8K и графике. Ты веган и медик. Твои контакты: {MAIN_BOT_URL}. Отвечай кратко."
+        
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message.text}]
         )
-        bot.reply_to(message, completion.choices[0].message.content)
+        ai_response = completion.choices[0].message.content
+        bot.reply_to(message, ai_response)
+        
+        # ОТЧЕТ В ГРУППУ (Логи диалога)
+        anon_id = str(message.from_user.id)[-4:]
+        log_msg = f"💬 **ДИАЛОГ В ЧАТЕ (...{anon_id})**\n\n👤: {message.text}\n\n🤖: {ai_response}"
+        send_to_group(log_msg)
+        
     except Exception as e:
         print(f"Chat AI Error: {e}")
         bot.reply_to(message, "Немного задумался над волной... Попробуй еще раз через минуту!")
 
+# --- ЗАПУСК ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     
-    # 1. Запуск Flask
+    # 1. Flask сервер (для Render Check)
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True).start()
     
-    # 2. Запуск Hunter
+    # 2. Авто-охотник (фоновый процесс)
     threading.Thread(target=auto_hunter, daemon=True).start()
     
     print(f"[SYSTEM] Starting bot on port {port}...")
     
-    # 3. Основной цикл Bot Polling
+    # 3. Основной поток: Телеграм Поллинг
     while True:
         try:
             bot.remove_webhook()
-            # Увеличенные таймауты для стабильности на Render
+            # Поллинг с защитой от вылетов
             bot.polling(none_stop=True, interval=2, timeout=60, long_polling_timeout=60)
         except Exception as e:
             print(f"[SYSTEM] Polling error: {e}")
-            time.sleep(10)
+            time.sleep(10) # Пауза перед перезапуском при ошибке сети
