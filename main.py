@@ -17,6 +17,10 @@ app = Flask(__name__)
 def home():
     return "Dr. Surf Hunter: AI Professional Edition is Running"
 
+@app.route('/health')
+def health():
+    return {"status": "ok"}, 200
+
 # Настройки стабильности
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
@@ -29,7 +33,7 @@ BOT_TOKEN = get_clean_env('BOT_TOKEN')
 GROQ_API_KEY = get_clean_env('GROQ_API_KEY')
 LOG_GROUP_ID = get_clean_env('LOG_GROUP_ID', '-5025901736') 
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False) # Отключаем стандартную многопоточность для стабильности
 client = Groq(api_key=GROQ_API_KEY)
 
 # --- АКТУАЛЬНЫЕ ССЫЛКИ И КОНТАКТЫ ---
@@ -39,8 +43,17 @@ PORTFOLIO_URL = "https://youtu.be/j2BNN5TNqiw"
 SYSTEM_PROMPT = """
 Ты — Dr. Surf, лаконичный цифровой двойник Виктории Акопян. 
 ТЫ: Веган (никаких молочных продуктов и мяса), медик (МГМСУ/МОНИКИ), эксперт 8K и AI. 
+
+ТВОИ КОНТАКТЫ (выдавай только по запросу):
+- Instagram: dr.surf и dr.surf.ai
+- Facebook: https://www.facebook.com/ssfmoscow
+- WhatsApp: +995511285789
+- LinkedIn: https://www.linkedin.com/in/victoria-akopyan
+- Портфолио: https://youtu.be/j2BNN5TNqiw
+- Заказать услуги: https://kwork.ru/user/dr_surf
+
 ПРАВИЛА: Отвечай кратко (1-2 абзаца). Твоя задача — показать экспертность и экологичность подхода. 
-Ссылки на контакты давай только если прямо спросят.
+Ссылки на контакты давай только если прямо спросят как связаться или попросят соцсети.
 """
 
 OFFER_TEMPLATES = {
@@ -93,22 +106,25 @@ def fetch_orders(ignore_history=False):
     for feed_info in RSS_FEEDS:
         try:
             print(f"[FETCH] Опрос {feed_info['name']}...", flush=True)
-            # Имитация разных браузеров для обхода блокировок
+            # Улучшенные заголовки для обхода 404/410
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'application/xml,text/xml,application/xhtml+xml,text/html;q=0.9',
+                'Referer': 'https://www.google.com/',
+                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8'
             }
             
-            # Для Kwork и Habr используем сессию
-            session = requests.Session()
-            response = session.get(feed_info["url"], headers=headers, timeout=25)
+            response = requests.get(feed_info["url"], headers=headers, timeout=30)
             
             if response.status_code != 200:
                 print(f"[FETCH FAIL] {feed_info['name']} статус: {response.status_code}", flush=True)
                 continue
                 
             feed = feedparser.parse(response.content)
+            if not feed.entries:
+                print(f"[FETCH EMPTY] {feed_info['name']} не вернул записей", flush=True)
+                continue
+
             for entry in feed.entries[:40]:
                 title = entry.title if hasattr(entry, 'title') else ""
                 desc = getattr(entry, 'description', getattr(entry, 'summary', ''))
@@ -122,7 +138,7 @@ def fetch_orders(ignore_history=False):
                             "price": extract_price(entry), "offer": get_best_template(title)
                         })
                         if not ignore_history: SENT_PROJECTS.add(link)
-            time.sleep(random.uniform(1, 3)) 
+            time.sleep(2) 
         except Exception as e: 
             print(f"[FETCH ERROR] {feed_info['name']}: {e}", flush=True)
     return found
@@ -131,7 +147,7 @@ def send_to_group(text):
     if LOG_GROUP_ID:
         try: 
             bot.send_message(LOG_GROUP_ID, text, parse_mode="HTML", disable_web_page_preview=True)
-            print(f"[LOG] OK", flush=True)
+            print(f"[LOG] Сообщение отправлено в группу", flush=True)
         except Exception as e: 
             print(f"[LOG ERROR] {e}", flush=True)
 
@@ -146,20 +162,18 @@ def get_ai_reply(user_text):
         print(f"[AI ERR] {e}", flush=True)
         return "Я немного задумалась. Повтори чуть позже? 🏄‍♀️"
 
-@bot.message_handler(commands=['start', 'status', 'check'])
+@bot.message_handler(commands=['start', 'check'])
 def handle_commands(message):
     try:
         if message.text == '/start':
-            bot.reply_to(message, "Dr. Surf Hunter активен! Мониторинг всех бирж запущен. 🌊")
-        elif message.text == '/status':
-            bot.reply_to(message, f"Бот в сети. База: {len(SENT_PROJECTS)} ссылок.")
+            bot.reply_to(message, "Dr. Surf Hunter активен! Я слышу тебя. 🌊")
         elif message.text == '/check':
-            bot.send_message(message.chat.id, "🔍 Сканирую горизонт событий...")
+            bot.send_message(message.chat.id, "🔍 Принудительный поиск запущен...")
             projects = fetch_orders(ignore_history=True)
             if not projects:
-                bot.send_message(message.chat.id, "🌊 Новых заказов не найдено.")
-            for p in projects[:5]:
-                msg = f"🎯 <b>{p['site']}</b>\n{clean_html(p['title'])}\n💰 {p['price']}\n🔗 {p['url']}"
+                bot.send_message(message.chat.id, "🌊 Пока новых волн нет.")
+            for p in projects[:3]:
+                msg = f"🎯 <b>{p['site']}</b>\n{clean_html(p['title'])}\n🔗 {p['url']}"
                 bot.send_message(message.chat.id, msg, parse_mode="HTML")
     except Exception as e:
         print(f"[CMD ERR] {e}", flush=True)
@@ -167,20 +181,20 @@ def handle_commands(message):
 @bot.message_handler(func=lambda m: True)
 def handle_all_messages(message):
     if message.chat.type == 'private':
-        print(f"[INCOMING] Сообщение от {message.from_user.first_name}", flush=True)
+        print(f"[INCOMING] Сообщение от {message.from_user.first_name}: {message.text}", flush=True)
         try:
             bot.send_chat_action(message.chat.id, 'typing')
             reply = get_ai_reply(message.text)
             bot.reply_to(message, reply)
             
-            report = (f"👤 <b>Личный чат</b>\nОт: {message.from_user.first_name} (@{message.from_user.username})\n"
+            report = (f"👤 <b>Личный чат</b>\nОт: {message.from_user.first_name}\n"
                       f"Текст: {message.text}\n\n🤖 <b>Ответ:</b>\n{reply}")
             send_to_group(report)
         except Exception as e:
             print(f"[MSG PROC ERR] {e}", flush=True)
 
 def auto_hunter():
-    print("[HUNTER] Запущен", flush=True)
+    print("[HUNTER] Цикл запущен", flush=True)
     while True:
         try:
             projects = fetch_orders()
@@ -192,20 +206,21 @@ def auto_hunter():
                 time.sleep(5)
         except Exception as e: 
             print(f"[AUTO ERR] {e}", flush=True)
-        time.sleep(600) # Опрос раз в 10 минут
+        time.sleep(600)
 
 if __name__ == "__main__":
-    # Flask для Render
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
-    # Фоновый охотник
+    # 1. Flask для Render (в отдельном потоке)
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False), daemon=True).start()
+    
+    # 2. Охотник (в отдельном потоке)
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    print("[SYSTEM] Запуск Polling...", flush=True)
+    # 3. Основной поток для Telegram (безопасный цикл)
+    print("[SYSTEM] Старт прослушивания сообщений...", flush=True)
+    bot.remove_webhook()
     while True:
         try:
-            bot.remove_webhook()
-            # Убрал drop_pending_updates, так как на старой версии pyTelegramBotAPI это вызывает ошибку
-            bot.polling(none_stop=True, interval=1, timeout=60)
+            bot.polling(none_stop=True, interval=2, timeout=40)
         except Exception as e:
-            print(f"[RESTART] Сбой: {e}", flush=True)
-            time.sleep(15)
+            print(f"[POLLING ERROR] {e}", flush=True)
+            time.sleep(10)
