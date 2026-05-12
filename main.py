@@ -38,23 +38,6 @@ LINKEDIN_URL = "https://www.linkedin.com/in/victoria-akopyan"
 INSTAGRAM_URL = "https://instagram.com/dr.surf.ai"
 WHATSAPP_URL = "https://wa.me/995511285789"
 
-MY_CONTACTS = f"""
-👤 <b>Виктория Акопян</b>
-🌟 <i>AI Prompt Engineer | Digital Twin Architect | Visual Specialist</i>
-
-🚀 <b>Цифровой двойник:</b> {MAIN_BOT_URL}
-📡 <b>Сервис Охотник:</b> {HUNTER_BOT_URL}
-🎬 <b>Кейсы и YouTube:</b> {PORTFOLIO_URL}
-
-🔹 <b>Графика:</b> Flux.1, Midjourney v6, Stable Diffusion, DALL-E 3.
-🔹 <b>Видео:</b> Sora, Runway Gen-3, Kling, HeyGen, Luma.
-🔹 <b>Системы:</b> ИИ-агенты, автономные боты, LLM интеграция.
-
-📞 <b>Связь и соцсети:</b>
-📱 <a href="{INSTAGRAM_URL}">Instagram</a> | <a href="{FACEBOOK_URL}">Facebook</a>
-💼 <a href="{LINKEDIN_URL}">LinkedIn</a> | <a href="{WHATSAPP_URL}">WhatsApp</a>
-"""
-
 # --- ШАБЛОНЫ ОТКЛИКОВ ---
 OFFER_TEMPLATES = {
     "graphics": "Здравствуйте! Я специализируюсь на генеративной графике и визуальном стиле (Flux, Midjourney). Мои работы: {portfolio_url}. Готова обсудить создание уникального визуала!",
@@ -82,45 +65,12 @@ START_TIME = time.time()
 
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
 ]
 
 def clean_html(text):
-    """Очистка текста для безопасной отправки в HTML режиме"""
     if not text: return ""
     return text.replace("<", "&lt;").replace(">", "&gt;").replace("&", "&amp;")
-
-def fetch_hh_vacancies(query="AI Prompt Engineer", limit=10):
-    try:
-        url = f"https://api.hh.ru/vacancies?text={query}&area=1&per_page={limit}"
-        headers = {
-            'User-Agent': random.choice(USER_AGENTS),
-            'Accept': 'application/json'
-        }
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code == 200:
-            data = response.json()
-            vacs = []
-            for item in data.get('items', []):
-                salary = "По договоренности"
-                if item.get('salary'):
-                    s = item['salary']
-                    val_from = s.get('from') if s.get('from') else ""
-                    val_to = s.get('to') if s.get('to') else ""
-                    salary = f"{val_from}-{val_to} {s.get('currency')}"
-                
-                vacs.append({
-                    "title": item['name'],
-                    "url": item['alternate_url'],
-                    "price": salary,
-                    "site": "💼 HeadHunter",
-                    "offer": OFFER_TEMPLATES["ai_agent"].format(bot_url=MAIN_BOT_URL)
-                })
-            return vacs
-    except Exception as e:
-        print(f"HH Error: {e}")
-    return []
 
 def extract_price(entry):
     match = re.search(r"(\d[\d\s]*\d\s?(?:руб|₽|\$|USD|евро|€))", entry.title, re.IGNORECASE)
@@ -138,28 +88,20 @@ def get_best_template(title):
 
 def fetch_orders(ignore_history=False):
     found = []
-    print(f"[FETCH] Начинаю проверку бирж... (История игнорируется: {ignore_history})", flush=True)
+    print(f"[FETCH] Проверка бирж...", flush=True)
     for feed_info in RSS_FEEDS:
         try:
-            time.sleep(random.uniform(2, 4))
+            time.sleep(random.uniform(1, 3))
             headers = {'User-Agent': random.choice(USER_AGENTS)}
-            response = requests.get(feed_info["url"], headers=headers, timeout=25)
-            
-            if response.status_code != 200: 
-                print(f"[FETCH] Ошибка {feed_info['name']}: Статус {response.status_code}")
-                continue
+            response = requests.get(feed_info["url"], headers=headers, timeout=20)
+            if response.status_code != 200: continue
 
             feed = feedparser.parse(response.content)
-            print(f"[FETCH] {feed_info['name']}: Обработка {len(feed.entries)} записей")
-            
-            for entry in feed.entries[:40]:
+            for entry in feed.entries[:30]:
                 published_time = time.mktime(entry.published_parsed) if hasattr(entry, 'published_parsed') else time.time()
+                if not ignore_history and published_time < START_TIME - 3600: continue 
                 
-                # Более мягкий фильтр времени для ручной проверки
-                if not ignore_history and published_time < START_TIME - 7200:
-                    continue 
-                
-                title = entry.title if hasattr(entry, 'title') else "Без заголовка"
+                title = entry.title if hasattr(entry, 'title') else ""
                 desc = getattr(entry, 'description', '')
                 content = (title + desc).lower()
                 
@@ -167,112 +109,61 @@ def fetch_orders(ignore_history=False):
                     link = entry.link
                     if ignore_history or (link not in SENT_PROJECTS):
                         found.append({
-                            "title": title, 
-                            "url": link, 
-                            "site": feed_info["name"],
-                            "price": extract_price(entry), 
-                            "offer": get_best_template(title)
+                            "title": title, "url": link, "site": feed_info["name"],
+                            "price": extract_price(entry), "offer": get_best_template(title)
                         })
                         if not ignore_history: SENT_PROJECTS.add(link)
-        except Exception as e: 
-            print(f"Error fetching {feed_info['name']}: {e}")
-    
-    try:
-        hh_vacs = fetch_hh_vacancies()
-        for v in hh_vacs:
-            if ignore_history or (v['url'] not in SENT_PROJECTS):
-                found.append(v)
-                if not ignore_history: SENT_PROJECTS.add(v['url'])
-    except Exception as e:
-        print(f"HH Fetch Error: {e}")
-            
+        except Exception as e: print(f"Error {feed_info['name']}: {e}")
     return found
 
 def send_to_group(text):
     if LOG_GROUP_ID:
-        try: 
-            bot.send_message(LOG_GROUP_ID, text, parse_mode="HTML", disable_web_page_preview=True)
-        except Exception as e: 
-            print(f"Log Error: {e}", flush=True)
-            try: 
-                bot.send_message(LOG_GROUP_ID, "⚠️ Ошибка разметки. Данные заказа:\n" + text.replace("<b>","").replace("</b>",""), disable_web_page_preview=True)
-            except: pass
+        try: bot.send_message(LOG_GROUP_ID, text, parse_mode="HTML", disable_web_page_preview=True)
+        except Exception as e: print(f"Send Error: {e}")
 
 def auto_hunter():
-    print("[HUNTER] Охотник запущен (HTML Mode)", flush=True)
-    time.sleep(45) # Даем боту время на "прогрузку"
+    print("[HUNTER] Цикл запущен", flush=True)
+    time.sleep(30)
     while True:
         try:
             projects = fetch_orders()
             if projects:
-                print(f"[HUNTER] Найдено новых заказов: {len(projects)}", flush=True)
                 for p in projects:
-                    safe_title = clean_html(p['title'])
-                    safe_offer = clean_html(p['offer'])
-                    
-                    msg = (
-                        f"💎 <b>НОВЫЙ ЗАКАЗ!</b>\n\n"
-                        f"📍 <b>{p['site']}</b> | {p['price']}\n"
-                        f"📝 <i>{safe_title}</i>\n"
-                        f"🔗 <a href='{p['url']}'>Открыть заказ</a>\n\n"
-                        f"✉️ <b>ШАБЛОН ОТКЛИКА:</b>\n{safe_offer}\n\n"
-                        f"---"
-                    )
+                    msg = (f"💎 <b>НОВЫЙ ЗАКАЗ!</b>\n\n📍 <b>{p['site']}</b> | {p['price']}\n"
+                           f"📝 <i>{clean_html(p['title'])}</i>\n🔗 <a href='{p['url']}'>Открыть</a>\n\n"
+                           f"✉️ <b>ОТКЛИК:</b>\n{clean_html(p['offer'])}")
                     send_to_group(msg)
-                    time.sleep(15) 
-            else:
-                print("[HUNTER] Новых заказов не обнаружено.", flush=True)
-        except Exception as e: 
-            print(f"Hunter Loop Error: {e}", flush=True)
-        
-        time.sleep(900 + random.randint(0, 300))
+                    time.sleep(10)
+        except Exception as e: print(f"Hunter Loop Error: {e}")
+        time.sleep(600)
 
-# --- ОБРАБОТКА КОМАНД ---
-
-@bot.message_handler(commands=['start'])
-def welcome(message):
-    try:
-        bot.reply_to(message, "Dr. Surf Hunter: На связи! Система мониторинга перезапущена. Ошибки Conflict устранены. 🏄‍♀️")
-    except: pass
-
-@bot.message_handler(commands=['check'])
-def manual_check(message):
-    try:
-        bot.send_chat_action(message.chat.id, 'typing')
+@bot.message_handler(commands=['start', 'check'])
+def handle_commands(message):
+    if message.text == '/start':
+        bot.reply_to(message, "Dr. Surf Hunter Online. Ошибки Conflict устранены. 🏄‍♀️")
+    else:
         projects = fetch_orders(ignore_history=True)
-        report = "🎯 <b>АКТУАЛЬНЫЙ УЛОВ (Последние 10):</b>\n\n"
         if projects:
-            for p in projects[:10]:
-                safe_t = clean_html(p['title'])
-                report += f"💠 <b>{p['site']}</b> | {p['price']}\n<i>{safe_t}</i>\n🔗 <a href='{p['url']}'>Перейти</a>\n\n"
+            res = "🎯 <b>ПОСЛЕДНЕЕ:</b>\n\n" + "\n".join([f"🔹 {p['site']}: <a href='{p['url']}'>{clean_html(p['title'][:50])}...</a>" for p in projects[:7]])
+            bot.send_message(message.chat.id, res, parse_mode="HTML", disable_web_page_preview=True)
         else:
-            report += "🌊 Пока пусто. Проверь через 15 минут!\n"
-        
-        bot.send_message(message.chat.id, report, parse_mode="HTML", disable_web_page_preview=True)
-    except Exception as e:
-        print(f"Manual Check Error: {e}")
-
-# --- ЗАПУСК ---
+            bot.reply_to(message, "Пока новых волн нет.")
 
 def run_bot():
-    print("[BOT] Запуск интерфейса...", flush=True)
+    print("[BOT] Запуск Polling...", flush=True)
     while True:
         try:
-            # Жесткий сброс перед запуском
+            # ПРИНУДИТЕЛЬНЫЙ СБРОС ВЕБХУКА И ОЧИСТКА
             bot.remove_webhook()
-            time.sleep(5) 
-            # drop_pending_updates=True помогает избежать "заваливания" старыми сообщениями
-            bot.infinity_polling(timeout=90, long_polling_timeout=20, skip_pending=True)
+            # drop_pending_updates=True — КЛЮЧЕВОЕ: удаляет все сообщения, 
+            # пришедшие пока бот был в «конфликте», чтобы не спамить при старте.
+            bot.polling(none_stop=True, interval=3, timeout=60, drop_pending_updates=True)
         except Exception as e:
-            print(f"[RESTART] Ошибка polling: {e}. Сплю 20 сек...", flush=True)
-            time.sleep(20)
+            print(f"[RESTART] Конфликт или ошибка: {e}. Жду 15 сек...", flush=True)
+            time.sleep(15)
 
 if __name__ == "__main__":
-    # 1. Запускаем бота
     threading.Thread(target=run_bot, daemon=True).start()
-    # 2. Запускаем охотника
     threading.Thread(target=auto_hunter, daemon=True).start()
-    
-    # Flask для Uptime (Render/HF)
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
