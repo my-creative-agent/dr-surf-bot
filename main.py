@@ -78,7 +78,7 @@ KEYWORDS = [
 ]
 
 SENT_PROJECTS = set() 
-START_TIME = time.time() # Время запуска, чтобы не слать старье
+START_TIME = time.time() 
 
 USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -138,21 +138,26 @@ def get_best_template(title):
 
 def fetch_orders(ignore_history=False):
     found = []
+    print(f"[FETCH] Начинаю проверку бирж... (История игнорируется: {ignore_history})", flush=True)
     for feed_info in RSS_FEEDS:
         try:
-            time.sleep(random.uniform(2, 5))
+            time.sleep(random.uniform(2, 4))
             headers = {'User-Agent': random.choice(USER_AGENTS)}
             response = requests.get(feed_info["url"], headers=headers, timeout=25)
             
-            if response.status_code != 200: continue
+            if response.status_code != 200: 
+                print(f"[FETCH] Ошибка {feed_info['name']}: Статус {response.status_code}")
+                continue
 
             feed = feedparser.parse(response.content)
+            print(f"[FETCH] {feed_info['name']}: Обработка {len(feed.entries)} записей")
             
-            for entry in feed.entries[:30]:
-                # Проверка времени публикации (чтобы не спамить старым при перезагрузке)
+            for entry in feed.entries[:40]:
                 published_time = time.mktime(entry.published_parsed) if hasattr(entry, 'published_parsed') else time.time()
-                if not ignore_history and published_time < START_TIME - 3600:
-                    continue # Игнорируем всё, что старше часа от момента запуска
+                
+                # Более мягкий фильтр времени для ручной проверки
+                if not ignore_history and published_time < START_TIME - 7200:
+                    continue 
                 
                 title = entry.title if hasattr(entry, 'title') else "Без заголовка"
                 desc = getattr(entry, 'description', '')
@@ -178,30 +183,29 @@ def fetch_orders(ignore_history=False):
             if ignore_history or (v['url'] not in SENT_PROJECTS):
                 found.append(v)
                 if not ignore_history: SENT_PROJECTS.add(v['url'])
-    except: pass
+    except Exception as e:
+        print(f"HH Fetch Error: {e}")
             
     return found
 
 def send_to_group(text):
     if LOG_GROUP_ID:
         try: 
-            # Переход на HTML режим - он НЕ ломается от спецсимволов
             bot.send_message(LOG_GROUP_ID, text, parse_mode="HTML", disable_web_page_preview=True)
         except Exception as e: 
-            print(f"Log Error (HTML): {e}", flush=True)
+            print(f"Log Error: {e}", flush=True)
             try: 
-                # Резервный метод: чистый текст
                 bot.send_message(LOG_GROUP_ID, "⚠️ Ошибка разметки. Данные заказа:\n" + text.replace("<b>","").replace("</b>",""), disable_web_page_preview=True)
             except: pass
 
 def auto_hunter():
     print("[HUNTER] Охотник запущен (HTML Mode)", flush=True)
-    # Ждем немного, чтобы основной бот успел запуститься и очистить очередь
-    time.sleep(30)
+    time.sleep(45) # Даем боту время на "прогрузку"
     while True:
         try:
             projects = fetch_orders()
             if projects:
+                print(f"[HUNTER] Найдено новых заказов: {len(projects)}", flush=True)
                 for p in projects:
                     safe_title = clean_html(p['title'])
                     safe_offer = clean_html(p['offer'])
@@ -215,7 +219,9 @@ def auto_hunter():
                         f"---"
                     )
                     send_to_group(msg)
-                    time.sleep(12) 
+                    time.sleep(15) 
+            else:
+                print("[HUNTER] Новых заказов не обнаружено.", flush=True)
         except Exception as e: 
             print(f"Hunter Loop Error: {e}", flush=True)
         
@@ -225,21 +231,26 @@ def auto_hunter():
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter: На связи! Ошибки парсинга устранены (перешли на HTML). Жду заказов. 🏄‍♀️")
+    try:
+        bot.reply_to(message, "Dr. Surf Hunter: На связи! Система мониторинга перезапущена. Ошибки Conflict устранены. 🏄‍♀️")
+    except: pass
 
 @bot.message_handler(commands=['check'])
 def manual_check(message):
-    bot.send_chat_action(message.chat.id, 'typing')
-    projects = fetch_orders(ignore_history=True)
-    report = "🎯 <b>АКТУАЛЬНЫЙ УЛОВ:</b>\n\n"
-    if projects:
-        for p in projects[:10]:
-            safe_t = clean_html(p['title'])
-            report += f"💠 <b>{p['site']}</b> | {p['price']}\n<i>{safe_t}</i>\n🔗 <a href='{p['url']}'>Перейти</a>\n\n"
-    else:
-        report += "🌊 Пока пусто. Проверь через 15 минут!\n"
-    
-    bot.send_message(message.chat.id, report, parse_mode="HTML", disable_web_page_preview=True)
+    try:
+        bot.send_chat_action(message.chat.id, 'typing')
+        projects = fetch_orders(ignore_history=True)
+        report = "🎯 <b>АКТУАЛЬНЫЙ УЛОВ (Последние 10):</b>\n\n"
+        if projects:
+            for p in projects[:10]:
+                safe_t = clean_html(p['title'])
+                report += f"💠 <b>{p['site']}</b> | {p['price']}\n<i>{safe_t}</i>\n🔗 <a href='{p['url']}'>Перейти</a>\n\n"
+        else:
+            report += "🌊 Пока пусто. Проверь через 15 минут!\n"
+        
+        bot.send_message(message.chat.id, report, parse_mode="HTML", disable_web_page_preview=True)
+    except Exception as e:
+        print(f"Manual Check Error: {e}")
 
 # --- ЗАПУСК ---
 
@@ -247,12 +258,14 @@ def run_bot():
     print("[BOT] Запуск интерфейса...", flush=True)
     while True:
         try:
+            # Жесткий сброс перед запуском
             bot.remove_webhook()
-            time.sleep(2) # Пауза перед новым подключением
-            bot.infinity_polling(timeout=90, long_polling_timeout=20)
+            time.sleep(5) 
+            # drop_pending_updates=True помогает избежать "заваливания" старыми сообщениями
+            bot.infinity_polling(timeout=90, long_polling_timeout=20, skip_pending=True)
         except Exception as e:
-            print(f"[RESTART] Конфликт или обрыв: {e}")
-            time.sleep(15)
+            print(f"[RESTART] Ошибка polling: {e}. Сплю 20 сек...", flush=True)
+            time.sleep(20)
 
 if __name__ == "__main__":
     # 1. Запускаем бота
@@ -260,6 +273,6 @@ if __name__ == "__main__":
     # 2. Запускаем охотника
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    # Flask для Uptime
+    # Flask для Uptime (Render/HF)
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
