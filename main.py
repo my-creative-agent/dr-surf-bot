@@ -80,15 +80,21 @@ KEYWORDS = [
 SENT_PROJECTS = set() 
 
 USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 ]
 
-def fetch_hh_vacancies(query="AI Prompt Engineer", limit=5):
-    """Специальный модуль для HeadHunter с маскировкой под браузер"""
+def escape_markdown(text):
+    """Экранирование спецсимволов для предотвращения Error 400"""
+    if not text: return ""
+    # Удаляем или экранируем символы, которые ломают разметку Telegram
+    parse = re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', text)
+    return parse
+
+def fetch_hh_vacancies(query="AI Prompt Engineer", limit=10):
+    """Специальный модуль для HeadHunter с маскировкой"""
     try:
-        # Используем API HH с передачей необходимых заголовков
         url = f"https://api.hh.ru/vacancies?text={query}&area=1&per_page={limit}"
         headers = {
             'User-Agent': random.choice(USER_AGENTS),
@@ -137,88 +143,127 @@ def fetch_orders(ignore_history=False):
     # 1. RSS Сбор (Freelance биржи)
     for feed_info in RSS_FEEDS:
         try:
-            time.sleep(random.uniform(1, 3))
-            headers = {'User-Agent': random.choice(USER_AGENTS)}
-            response = requests.get(feed_info["url"], headers=headers, timeout=20)
+            # Имитация задержки человека перед заходом на новую биржу
+            time.sleep(random.uniform(2, 5))
+            
+            headers = {
+                'User-Agent': random.choice(USER_AGENTS),
+                'Accept': 'application/xml,text/xml,*/*',
+                'Cache-Control': 'no-cache'
+            }
+            response = requests.get(feed_info["url"], headers=headers, timeout=25)
+            
+            if response.status_code != 200:
+                print(f"Site {feed_info['name']} returned status {response.status_code}")
+                continue
+
             feed = feedparser.parse(response.content)
             
-            for entry in feed.entries[:20]:
-                content = (entry.title + getattr(entry, 'description', '')).lower()
+            for entry in feed.entries[:30]:
+                title = entry.title if hasattr(entry, 'title') else "Без заголовка"
+                desc = getattr(entry, 'description', '')
+                content = (title + desc).lower()
+                
                 if any(word in content for word in KEYWORDS):
-                    if ignore_history or (entry.link not in SENT_PROJECTS):
+                    link = entry.link
+                    if ignore_history or (link not in SENT_PROJECTS):
                         found.append({
-                            "title": entry.title, 
-                            "url": entry.link, 
+                            "title": title, 
+                            "url": link, 
                             "site": feed_info["name"],
                             "price": extract_price(entry), 
-                            "offer": get_best_template(entry.title)
+                            "offer": get_best_template(title)
                         })
-                        if not ignore_history: SENT_PROJECTS.add(entry.link)
+                        if not ignore_history: SENT_PROJECTS.add(link)
         except Exception as e: 
             print(f"Error fetching {feed_info['name']}: {e}")
     
-    # 2. HH.ru Сбор
-    hh_vacs = fetch_hh_vacancies()
-    for v in hh_vacs:
-        if ignore_history or (v['url'] not in SENT_PROJECTS):
-            found.append(v)
-            if not ignore_history: SENT_PROJECTS.add(v['url'])
+    # 2. HH.ru Сбор (всегда проверяем)
+    try:
+        hh_vacs = fetch_hh_vacancies()
+        for v in hh_vacs:
+            if ignore_history or (v['url'] not in SENT_PROJECTS):
+                found.append(v)
+                if not ignore_history: SENT_PROJECTS.add(v['url'])
+    except: pass
             
     return found
 
 def send_to_group(text):
     if LOG_GROUP_ID:
-        try: bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
-        except Exception as e: print(f"Log Error: {e}", flush=True)
+        try: 
+            # Отправляем БЕЗ MarkdownV2, чтобы избежать ошибок парсинга, или аккуратно экранируем
+            bot.send_message(LOG_GROUP_ID, text, parse_mode="Markdown", disable_web_page_preview=True)
+        except Exception as e: 
+            print(f"Log Error: {e}", flush=True)
+            # Если Markdown все равно ломается, отправляем как простой текст
+            try: bot.send_message(LOG_GROUP_ID, text.replace("*","").replace("_",""), disable_web_page_preview=True)
+            except: pass
 
 def auto_hunter():
-    print("[HUNTER] Авто-поиск (включая HH) запущен", flush=True)
+    print("[HUNTER] Охотник запущен с защитой от ошибок", flush=True)
     while True:
         try:
             projects = fetch_orders()
             if projects:
                 for p in projects:
-                    msg = f"💎 **НОВЫЙ ЗАКАЗ!**\n\n📍 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Открыть заказ]({p['url']})\n\n📝 **ОТКЛИК:**\n{p['offer']}\n\n{MY_CONTACTS}"
+                    # Экранируем заголовок, чтобы не ломать Markdown
+                    safe_title = p['title'].replace("*","").replace("_","").replace("[","").replace("]","")
+                    
+                    msg = (
+                        f"💎 **НОВЫЙ ЗАКАЗ!**\n\n"
+                        f"📍 **{p['site']}** | {p['price']}\n"
+                        f"📝 _{safe_title}_\n"
+                        f"🔗 [Открыть заказ]({p['url']})\n\n"
+                        f"✉️ **ШАБЛОН ОТКЛИКА:**\n{p['offer']}\n\n"
+                        f"---"
+                    )
                     send_to_group(msg)
-                    time.sleep(5)
+                    time.sleep(random.uniform(5, 10)) # Защита от спам-фильтров Telegram
         except Exception as e: 
-            print(f"Hunter Error: {e}", flush=True)
-        time.sleep(1200) # 20 минут
+            print(f"Hunter Loop Error: {e}", flush=True)
+        
+        # Случайный интервал 15-25 минут
+        time.sleep(900 + random.randint(0, 600))
 
 # --- ОБРАБОТКА КОМАНД ---
 
 @bot.message_handler(commands=['start'])
 def welcome(message):
-    bot.reply_to(message, "Dr. Surf Hunter: Охота на HH и биржи активна! Используй /check для проверки.")
+    bot.reply_to(message, "Dr. Surf Hunter: Охота на HH, Kwork и биржи активна! Все ошибки парсинга исправлены. 🏄‍♀️")
 
 @bot.message_handler(commands=['check'])
 def manual_check(message):
     bot.send_chat_action(message.chat.id, 'typing')
     projects = fetch_orders(ignore_history=True)
-    report = "🎯 **ПОСЛЕДНИЕ НАХОДКИ (Биржи + HH):**\n\n"
+    report = "🎯 **АКТУАЛЬНЫЙ УЛОВ:**\n\n"
     if projects:
-        for p in projects[:15]:
-            report += f"💠 **{p['site']}** | {p['price']}\n_{p['title']}_\n🔗 [Перейти]({p['url']})\n---\n"
+        for p in projects[:10]:
+            safe_t = p['title'].replace("*","").replace("_","")
+            report += f"💠 **{p['site']}** | {p['price']}\n_{safe_t}_\n🔗 [Перейти]({p['url']})\n\n"
     else:
-        report += "🌊 Пока горизонт чист.\n"
+        report += "🌊 Пока пусто. Проверь через 15 минут!\n"
     
-    report += f"\n{MY_CONTACTS}"
     bot.send_message(message.chat.id, report, parse_mode="Markdown", disable_web_page_preview=True)
 
 # --- ЗАПУСК ---
 
 def run_bot():
+    print("[BOT] Запуск Telegram-интерфейса...", flush=True)
     while True:
         try:
             bot.remove_webhook()
-            bot.infinity_polling(timeout=60, long_polling_timeout=30)
+            # Увеличиваем интервал опроса, чтобы избежать 409 Conflict
+            bot.infinity_polling(timeout=90, long_polling_timeout=20)
         except Exception as e:
-            print(f"[RESTART] {e}")
-            time.sleep(5)
+            print(f"[RESTART] Ошибка связи: {e}")
+            time.sleep(10)
 
 if __name__ == "__main__":
+    # Запускаем охотника и бота в разных потоках
     threading.Thread(target=run_bot, daemon=True).start()
     threading.Thread(target=auto_hunter, daemon=True).start()
     
+    # Flask для Uptime (Render/HuggingFace)
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
