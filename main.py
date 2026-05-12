@@ -17,7 +17,7 @@ app = Flask(__name__)
 def home():
     return "Dr. Surf Hunter: AI Professional Edition is Running"
 
-# Настройки стабильности - увеличиваем для плохой связи
+# Настройки стабильности
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
 
@@ -47,7 +47,7 @@ RSS_FEEDS = [
     {"url": "https://www.fl.ru/rss/all.xml", "name": "🚀 FL"},
     {"url": "https://freelance.habr.com/tasks.rss", "name": "👨‍💻 Habr"},
     {"url": "https://freelance.ru/rss/feed/list.rss", "name": "🛠 Freelance.ru"},
-    {"url": "https://kwork.ru/rss/projects.xml", "name": "🎨 Kwork"}
+    {"url": "https://kwork.ru/projects/rss", "name": "🎨 Kwork"} # Исправлен URL Kwork
 ]
 
 KEYWORDS = [
@@ -60,9 +60,7 @@ SENT_PROJECTS = set()
 START_TIME = time.time() 
 
 USER_AGENTS = [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 ]
 
 def clean_html(text):
@@ -90,12 +88,9 @@ def fetch_orders(ignore_history=False):
     for feed_info in RSS_FEEDS:
         try:
             print(f"[FETCH] Запрос к {feed_info['name']}...", flush=True)
-            time.sleep(random.uniform(2, 5)) # Увеличили паузу между биржами
-            headers = {
-                'User-Agent': random.choice(USER_AGENTS),
-                'Accept': 'application/rss+xml, application/xml, text/xml, */*'
-            }
-            response = requests.get(feed_info["url"], headers=headers, timeout=30)
+            time.sleep(random.uniform(1, 3))
+            headers = {'User-Agent': random.choice(USER_AGENTS)}
+            response = requests.get(feed_info["url"], headers=headers, timeout=20)
             
             print(f"[DEBUG] {feed_info['name']} Status: {response.status_code}", flush=True)
             
@@ -103,15 +98,7 @@ def fetch_orders(ignore_history=False):
                 continue
 
             feed = feedparser.parse(response.content)
-            print(f"[DEBUG] {feed_info['name']} Найдено записей: {len(feed.entries)}", flush=True)
-
-            for entry in feed.entries[:20]:
-                published_time = time.mktime(entry.published_parsed) if hasattr(entry, 'published_parsed') else time.time()
-                
-                # Если не игнорируем историю, берем только свежее (последний час)
-                if not ignore_history and published_time < START_TIME - 3600:
-                    continue 
-                
+            for entry in feed.entries[:30]:
                 title = entry.title if hasattr(entry, 'title') else ""
                 desc = getattr(entry, 'description', '')
                 content = (title + desc).lower()
@@ -127,7 +114,7 @@ def fetch_orders(ignore_history=False):
         except Exception as e: 
             print(f"[ERROR] {feed_info['name']}: {e}", flush=True)
     
-    print(f"--- [FETCH END] Найдено подходящих: {len(found)} ---", flush=True)
+    print(f"--- [FETCH END] Найдено: {len(found)} ---", flush=True)
     return found
 
 def send_to_group(text):
@@ -142,50 +129,46 @@ def auto_hunter():
     while True:
         try:
             projects = fetch_orders()
-            if projects:
-                for p in projects:
-                    msg = (f"💎 <b>НОВЫЙ ЗАКАЗ!</b>\n\n📍 <b>{p['site']}</b> | {p['price']}\n"
-                           f"📝 <i>{clean_html(p['title'])}</i>\n🔗 <a href='{p['url']}'>Открыть</a>\n\n"
-                           f"✉️ <b>ОТКЛИК:</b>\n{clean_html(p['offer'])}")
-                    send_to_group(msg)
-                    time.sleep(5) # Плавная отправка
+            for p in projects:
+                msg = (f"💎 <b>НОВЫЙ ЗАКАЗ!</b>\n\n📍 <b>{p['site']}</b> | {p['price']}\n"
+                       f"📝 <i>{clean_html(p['title'])}</i>\n🔗 <a href='{p['url']}'>Открыть</a>\n\n"
+                       f"✉️ <b>ОТКЛИК:</b>\n{clean_html(p['offer'])}")
+                send_to_group(msg)
+                time.sleep(3)
         except Exception as e: 
             print(f"[HUNTER CRASH] {e}", flush=True)
-        
-        # Ждем 10 минут до следующей проверки
         time.sleep(600)
 
 @bot.message_handler(commands=['start', 'check', 'status'])
 def handle_commands(message):
     if message.text == '/start':
-        bot.reply_to(message, "Dr. Surf Hunter Online. Мониторинг запущен. 🏄‍♀️")
+        bot.reply_to(message, "Dr. Surf Hunter Online. 🏄‍♀️")
     elif message.text == '/status':
-        bot.reply_to(message, f"Бот активен.\nПроектов в памяти: {len(SENT_PROJECTS)}\nВремя работы: {int(time.time() - START_TIME)} сек.")
+        bot.reply_to(message, f"Активен. Проектов: {len(SENT_PROJECTS)}")
     else:
-        bot.send_message(message.chat.id, "🔍 Принудительная проверка бирж... (жди 10-15 сек)")
+        bot.send_message(message.chat.id, "🔍 Проверка всех бирж...")
         projects = fetch_orders(ignore_history=True)
         if projects:
-            res = "🎯 <b>ПОСЛЕДНИЕ НАЙДЕННЫЕ:</b>\n\n" + "\n".join([f"🔹 {p['site']}: <a href='{p['url']}'>{clean_html(p['title'][:50])}...</a>" for p in projects[:10]])
-            bot.send_message(message.chat.id, res, parse_mode="HTML", disable_web_page_preview=True)
+            for p in projects[:5]:
+                msg = (f"🎯 <b>НАЙДЕНО:</b> {p['site']}\n{clean_html(p['title'])}\n"
+                       f"💰 {p['price']}\n🔗 {p['url']}\n\n✉️ <b>ОТКЛИК:</b>\n{p['offer']}")
+                bot.send_message(message.chat.id, msg, parse_mode="HTML")
         else:
-            bot.send_message(message.chat.id, "🌊 Прямо сейчас ничего подходящего не найдено.")
+            bot.send_message(message.chat.id, "🌊 Пусто.")
 
-def run_bot():
-    print("[BOT] Запуск Telegram-интерфейса...", flush=True)
+if __name__ == "__main__":
+    # Flask в отдельном потоке
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
+    
+    # Hunter в отдельном потоке
+    threading.Thread(target=auto_hunter, daemon=True).start()
+    
+    # Бот в основном потоке (чтобы не дублировался)
+    print("[BOT] Запуск...", flush=True)
     while True:
         try:
             bot.remove_webhook()
-            bot.delete_webhook(drop_pending_updates=True)
-            bot.polling(none_stop=True, interval=2, timeout=60)
+            bot.polling(none_stop=True, interval=3, timeout=60)
         except Exception as e:
-            print(f"[RESTART] Ошибка связи: {e}. Рестарт через 15 сек...", flush=True)
-            time.sleep(15)
-
-if __name__ == "__main__":
-    # Запускаем охотника и бота в разных потоках
-    threading.Thread(target=auto_hunter, daemon=True).start()
-    threading.Thread(target=run_bot, daemon=True).start()
-    
-    # Запуск Flask сервера (Render требует этого для жизни)
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+            print(f"[RESTART] {e}", flush=True)
+            time.sleep(10)
