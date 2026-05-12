@@ -47,7 +47,7 @@ RSS_FEEDS = [
     {"url": "https://www.fl.ru/rss/all.xml", "name": "🚀 FL"},
     {"url": "https://freelance.habr.com/tasks.rss", "name": "👨‍💻 Habr"},
     {"url": "https://freelance.ru/rss/feed/list.rss", "name": "🛠 Freelance.ru"},
-    {"url": "https://kwork.ru/projects/rss", "name": "🎨 Kwork"} # Исправлен URL Kwork
+    {"url": "https://kwork.ru/projects/rss", "name": "🎨 Kwork"}
 ]
 
 KEYWORDS = [
@@ -92,9 +92,8 @@ def fetch_orders(ignore_history=False):
             headers = {'User-Agent': random.choice(USER_AGENTS)}
             response = requests.get(feed_info["url"], headers=headers, timeout=20)
             
-            print(f"[DEBUG] {feed_info['name']} Status: {response.status_code}", flush=True)
-            
             if response.status_code != 200:
+                print(f"[DEBUG] {feed_info['name']} Status: {response.status_code}", flush=True)
                 continue
 
             feed = feedparser.parse(response.content)
@@ -114,7 +113,7 @@ def fetch_orders(ignore_history=False):
         except Exception as e: 
             print(f"[ERROR] {feed_info['name']}: {e}", flush=True)
     
-    print(f"--- [FETCH END] Найдено: {len(found)} ---", flush=True)
+    print(f"--- [FETCH END] Найдено подходящих: {len(found)} ---", flush=True)
     return found
 
 def send_to_group(text):
@@ -144,7 +143,7 @@ def handle_commands(message):
     if message.text == '/start':
         bot.reply_to(message, "Dr. Surf Hunter Online. 🏄‍♀️")
     elif message.text == '/status':
-        bot.reply_to(message, f"Активен. Проектов: {len(SENT_PROJECTS)}")
+        bot.reply_to(message, f"Активен. Проектов в памяти: {len(SENT_PROJECTS)}")
     else:
         bot.send_message(message.chat.id, "🔍 Проверка всех бирж...")
         projects = fetch_orders(ignore_history=True)
@@ -154,21 +153,24 @@ def handle_commands(message):
                        f"💰 {p['price']}\n🔗 {p['url']}\n\n✉️ <b>ОТКЛИК:</b>\n{p['offer']}")
                 bot.send_message(message.chat.id, msg, parse_mode="HTML")
         else:
-            bot.send_message(message.chat.id, "🌊 Пусто.")
+            bot.send_message(message.chat.id, "🌊 Пока новых волн нет.")
 
 if __name__ == "__main__":
-    # Flask в отдельном потоке
+    # Flask для Uptime в фоне
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
     
-    # Hunter в отдельном потоке
+    # Hunter для сбора заказов в фоне
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    # Бот в основном потоке (чтобы не дублировался)
-    print("[BOT] Запуск...", flush=True)
+    # Основной цикл бота
+    print("[BOT] Принудительная очистка и запуск...", flush=True)
     while True:
         try:
-            bot.remove_webhook()
-            bot.polling(none_stop=True, interval=3, timeout=60)
+            # Сброс всех старых соединений перед стартом
+            bot.delete_webhook(drop_pending_updates=True)
+            time.sleep(2)
+            # threaded=False запрещает боту плодить лишние потоки для опроса API
+            bot.polling(none_stop=True, interval=3, timeout=90, threaded=False)
         except Exception as e:
-            print(f"[RESTART] {e}", flush=True)
-            time.sleep(10)
+            print(f"[RESTART] Конфликт или сбой: {e}", flush=True)
+            time.sleep(15)
