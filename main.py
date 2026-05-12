@@ -42,7 +42,6 @@ SYSTEM_PROMPT = """
 ПРАВИЛА: Отвечай кратко (1-2 абзаца). Ссылки давай только если просят контакты.
 """
 
-# Теперь в шаблонах всегда два кейса: видео и сам агент
 OFFER_TEMPLATES = {
     "graphics": "Здравствуйте! Специализируюсь на генеративной графике (Flux, Midjourney). \nМои кейсы:\n1. Видео и анимация: {portfolio_url}\n2. Пример AI-агента: {bot_url}\nГотова обсудить ваш проект!",
     "video": "Приветствую! Создаю фотореалистичное ИИ-видео (Runway, Kling, Sora). \nМои кейсы:\n1. Видео-портфолио: {portfolio_url}\n2. Мой цифровой двойник: {bot_url}\nБуду рада помочь!",
@@ -50,11 +49,14 @@ OFFER_TEMPLATES = {
     "general": "Здравствуйте! Я AI-специалист (графика, видео, ИИ-системы). \nМои работы:\n- Видео: {portfolio_url}\n- AI-агент: {bot_url}\nГотова к сотрудничеству!"
 }
 
+# Расширенный список фидов (добавлен HH и более агрессивные заголовки)
 RSS_FEEDS = [
     {"url": "https://www.fl.ru/rss/all.xml", "name": "🚀 FL"},
     {"url": "https://freelance.habr.com/tasks.rss", "name": "👨‍💻 Habr"},
     {"url": "https://freelance.ru/rss/feed/list.rss", "name": "🛠 Freelance.ru"},
-    {"url": "https://kwork.ru/projects/rss", "name": "🎨 Kwork"}
+    {"url": "https://kwork.ru/projects/rss", "name": "🎨 Kwork"},
+    # Экспериментальный фид для HH (через RSS мост или поиск)
+    {"url": "https://hh.ru/rss/search/vacancies.xml?text=AI+нейросети", "name": "👔 HH.ru"}
 ]
 
 KEYWORDS = [
@@ -91,12 +93,22 @@ def fetch_orders(ignore_history=False):
     for feed_info in RSS_FEEDS:
         try:
             print(f"[FETCH] Опрос {feed_info['name']}...", flush=True)
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
-            response = requests.get(feed_info["url"], headers=headers, timeout=20)
-            if response.status_code != 200: continue
+            headers = {
+                'User-Agent': random.choice([
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+                ]),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+            }
+            response = requests.get(feed_info["url"], headers=headers, timeout=30)
             
+            if response.status_code != 200:
+                print(f"[FETCH FAIL] {feed_info['name']} статус: {response.status_code}", flush=True)
+                continue
+                
             feed = feedparser.parse(response.content)
-            for entry in feed.entries[:25]:
+            for entry in feed.entries[:40]:
                 title = entry.title if hasattr(entry, 'title') else ""
                 desc = getattr(entry, 'description', getattr(entry, 'summary', ''))
                 content_full = (title + " " + desc).lower()
@@ -109,16 +121,18 @@ def fetch_orders(ignore_history=False):
                             "price": extract_price(entry), "offer": get_best_template(title)
                         })
                         if not ignore_history: SENT_PROJECTS.add(link)
+            time.sleep(random.uniform(2, 5)) 
         except Exception as e: 
-            print(f"[ERROR] {feed_info['name']}: {e}", flush=True)
+            print(f"[FETCH ERROR] {feed_info['name']}: {e}", flush=True)
     return found
 
 def send_to_group(text):
     if LOG_GROUP_ID:
         try: 
             bot.send_message(LOG_GROUP_ID, text, parse_mode="HTML", disable_web_page_preview=True)
+            print(f"[LOG] Сообщение отправлено в группу {LOG_GROUP_ID}", flush=True)
         except Exception as e: 
-            print(f"[SEND ERROR] {e}", flush=True)
+            print(f"[LOG ERROR] Не удалось отправить в {LOG_GROUP_ID}: {e}", flush=True)
 
 def get_ai_reply(user_text):
     try:
@@ -127,65 +141,65 @@ def get_ai_reply(user_text):
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user_text}]
         )
         return completion.choices[0].message.content
-    except:
-        return "Я немного задумалась над волной. Повтори чуть позже? 🏄‍♀️"
+    except Exception as e:
+        print(f"[AI ERR] {e}", flush=True)
+        return "Я немного задумалась. Повтори чуть позже? 🏄‍♀️"
 
 @bot.message_handler(commands=['start', 'status', 'check'])
 def handle_commands(message):
-    if message.text == '/start':
-        bot.reply_to(message, "Dr. Surf Hunter на связи. Мониторинг заказов и AI-поддержка активны! 🌊")
-    elif message.text == '/status':
-        bot.reply_to(message, f"Бот в сети. Проектов в базе: {len(SENT_PROJECTS)}")
-    elif message.text == '/check':
-        bot.send_message(message.chat.id, "🔍 Принудительная проверка всех бирж...")
-        projects = fetch_orders(ignore_history=True)
-        if not projects:
-            bot.send_message(message.chat.id, "🌊 Новых заказов пока нет.")
-        for p in projects[:3]:
-            msg = f"🎯 <b>{p['site']}</b>\n{clean_html(p['title'])}\n💰 {p['price']}\n🔗 {p['url']}"
-            bot.send_message(message.chat.id, msg, parse_mode="HTML")
+    try:
+        if message.text == '/start':
+            bot.reply_to(message, "Dr. Surf Hunter активен! Мониторю FL, Habr, Freelance.ru, Kwork и HH. 🌊")
+        elif message.text == '/status':
+            bot.reply_to(message, f"Бот онлайн. В базе ссылок: {len(SENT_PROJECTS)}")
+        elif message.text == '/check':
+            bot.send_message(message.chat.id, "🔍 Глубокое сканирование всех площадок...")
+            projects = fetch_orders(ignore_history=True)
+            if not projects:
+                bot.send_message(message.chat.id, "🌊 Новых волн не обнаружено.")
+            for p in projects[:5]:
+                msg = f"🎯 <b>{p['site']}</b>\n{clean_html(p['title'])}\n💰 {p['price']}\n🔗 {p['url']}"
+                bot.send_message(message.chat.id, msg, parse_mode="HTML")
+    except Exception as e:
+        print(f"[CMD ERR] {e}", flush=True)
 
 @bot.message_handler(func=lambda m: True)
 def handle_all_messages(message):
+    print(f"[INCOMING] Сообщение от {message.from_user.first_name} в {message.chat.type}", flush=True)
     if message.chat.type == 'private':
         bot.send_chat_action(message.chat.id, 'typing')
         reply = get_ai_reply(message.text)
         bot.reply_to(message, reply)
         
-        report = (f"👤 <b>Сообщение в личку</b> от <code>{message.from_user.id}</code>\n"
-                  f"От: {message.from_user.first_name}\n"
-                  f"Текст: {message.text}\n\n"
-                  f"🤖 <b>Ответ Dr. Surf:</b>\n{reply}")
+        report = (f"👤 <b>Личный чат</b>\nОт: {message.from_user.first_name} (@{message.from_user.username})\n"
+                  f"Текст: {message.text}\n\n🤖 <b>Ответ:</b>\n{reply}")
         send_to_group(report)
 
 def auto_hunter():
-    print("[HUNTER] Запущен", flush=True)
+    print("[HUNTER] Мониторинг запущен", flush=True)
     while True:
         try:
             projects = fetch_orders()
             for p in projects:
                 msg = (f"💎 <b>НОВЫЙ ЗАКАЗ!</b>\n📍 <b>{p['site']}</b> | {p['price']}\n"
                        f"📝 <i>{clean_html(p['title'])}</i>\n🔗 {p['url']}\n\n"
-                       f"✉️ <b>ОТКЛИК:</b>\n{clean_html(p['offer'])}")
+                       f"✉️ <b>КЕЙСЫ ДЛЯ ОТКЛИКА:</b>\n{p['offer']}")
                 send_to_group(msg)
                 time.sleep(5)
         except Exception as e: 
-            print(f"[HUNTER ERR] {e}", flush=True)
+            print(f"[AUTO ERR] {e}", flush=True)
         time.sleep(600)
 
 if __name__ == "__main__":
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    print("[BOT] Запуск системы...", flush=True)
+    print("[SYSTEM] Запуск Polling...", flush=True)
     while True:
         try:
-            bot.stop_polling()
-            time.sleep(2)
-            bot.delete_webhook(drop_pending_updates=True)
-            print("[BOT] Polling стартовал", flush=True)
-            # Убран аргумент threaded, который вызывал ошибку
-            bot.polling(none_stop=True, interval=3, timeout=60)
+            bot.remove_webhook()
+            # Добавлен drop_pending_updates чтобы бот не захлебнулся старыми сообщениями при старте
+            bot.polling(none_stop=True, interval=1, timeout=60, drop_pending_updates=True)
         except Exception as e:
-            print(f"[RESTART] Ошибка или сеть: {e}", flush=True)
-            time.sleep(20)
+            print(f"[RESTART] Сбой: {e}", flush=True)
+            time.sleep(10)
