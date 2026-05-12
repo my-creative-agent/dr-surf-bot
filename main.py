@@ -21,10 +21,14 @@ def home():
 apihelper.CONNECT_TIMEOUT = 90
 apihelper.READ_TIMEOUT = 90
 
-# Переменные окружения
-BOT_TOKEN = os.environ.get('BOT_TOKEN')
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
-LOG_GROUP_ID = os.environ.get('LOG_GROUP_ID', '-5025901736') 
+# Переменные окружения с защитой от лишних пробелов и мусора
+def get_clean_env(key, default=""):
+    val = os.environ.get(key, default)
+    return val.strip().replace('"', '').replace("'", "") if val else default
+
+BOT_TOKEN = get_clean_env('BOT_TOKEN')
+GROQ_API_KEY = get_clean_env('GROQ_API_KEY')
+LOG_GROUP_ID = get_clean_env('LOG_GROUP_ID', '-5025901736') 
 
 bot = telebot.TeleBot(BOT_TOKEN)
 client = Groq(api_key=GROQ_API_KEY)
@@ -140,7 +144,7 @@ def auto_hunter():
 @bot.message_handler(commands=['start', 'check'])
 def handle_commands(message):
     if message.text == '/start':
-        bot.reply_to(message, "Dr. Surf Hunter Online. Ошибки Conflict устранены. 🏄‍♀️")
+        bot.reply_to(message, "Dr. Surf Hunter Online. Все ошибки совместимости устранены. 🏄‍♀️")
     else:
         projects = fetch_orders(ignore_history=True)
         if projects:
@@ -153,13 +157,17 @@ def run_bot():
     print("[BOT] Запуск Polling...", flush=True)
     while True:
         try:
-            # ПРИНУДИТЕЛЬНЫЙ СБРОС ВЕБХУКА И ОЧИСТКА
+            # Универсальный способ сброса очереди для старых и новых версий библиотеки
             bot.remove_webhook()
-            # drop_pending_updates=True — КЛЮЧЕВОЕ: удаляет все сообщения, 
-            # пришедшие пока бот был в «конфликте», чтобы не спамить при старте.
-            bot.polling(none_stop=True, interval=3, timeout=60, drop_pending_updates=True)
+            try:
+                bot.delete_webhook(drop_pending_updates=True)
+            except:
+                pass
+            
+            # Запуск без проблемного аргумента
+            bot.polling(none_stop=True, interval=3, timeout=60)
         except Exception as e:
-            print(f"[RESTART] Конфликт или ошибка: {e}. Жду 15 сек...", flush=True)
+            print(f"[RESTART] Ошибка: {e}. Жду 15 сек...", flush=True)
             time.sleep(15)
 
 if __name__ == "__main__":
