@@ -21,7 +21,7 @@ def home():
 def health():
     return {"status": "ok"}, 200
 
-# Настройки стабильности
+# Настройки стабильности для работы в облаке
 apihelper.CONNECT_TIMEOUT = 120
 apihelper.READ_TIMEOUT = 120
 
@@ -33,7 +33,7 @@ BOT_TOKEN = get_clean_env('BOT_TOKEN')
 GROQ_API_KEY = get_clean_env('GROQ_API_KEY')
 LOG_GROUP_ID = get_clean_env('LOG_GROUP_ID', '-5025901736') 
 
-bot = telebot.TeleBot(BOT_TOKEN, threaded=False) # Отключаем стандартную многопоточность для стабильности
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False) 
 client = Groq(api_key=GROQ_API_KEY)
 
 # --- АКТУАЛЬНЫЕ ССЫЛКИ И КОНТАКТЫ ---
@@ -63,7 +63,7 @@ OFFER_TEMPLATES = {
     "general": "Здравствуйте! Я AI-специалист (графика, видео, ИИ-системы). \nМои работы:\n- Видео: {portfolio_url}\n- AI-агент: {bot_url}\nГотова к сотрудничеству!"
 }
 
-# Обновленные ссылки фидов с защитой от 404
+# Список бирж с оптимизированными параметрами
 RSS_FEEDS = [
     {"url": "https://www.fl.ru/rss/all.xml", "name": "🚀 FL"},
     {"url": "https://freelance.habr.com/tasks.rss", "name": "👨‍💻 Habr"},
@@ -103,51 +103,72 @@ def get_best_template(title):
 def fetch_orders(ignore_history=False):
     found = []
     print(f"--- [FETCH START] ---", flush=True)
+    
+    # Эмуляция поведения реального пользователя
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+        'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cache-Control': 'max-age=0',
+        'Connection': 'keep-alive',
+        'Referer': 'https://www.google.com/'
+    }
+
     for feed_info in RSS_FEEDS:
         try:
             print(f"[FETCH] Опрос {feed_info['name']}...", flush=True)
-            # Улучшенные заголовки для обхода 404/410
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'application/xml,text/xml,application/xhtml+xml,text/html;q=0.9',
-                'Referer': 'https://www.google.com/',
-                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8'
-            }
             
-            response = requests.get(feed_info["url"], headers=headers, timeout=30)
+            # Используем сессию для сохранения cookies (важно для Kwork/HH)
+            session = requests.Session()
+            response = session.get(feed_info["url"], headers=headers, timeout=30)
             
             if response.status_code != 200:
                 print(f"[FETCH FAIL] {feed_info['name']} статус: {response.status_code}", flush=True)
                 continue
                 
             feed = feedparser.parse(response.content)
+            
             if not feed.entries:
-                print(f"[FETCH EMPTY] {feed_info['name']} не вернул записей", flush=True)
+                print(f"[FETCH EMPTY] {feed_info['name']} пуст", flush=True)
                 continue
 
-            for entry in feed.entries[:40]:
+            # Берем только самые свежие записи (первые 15), чтобы не слать старье
+            for entry in feed.entries[:15]:
                 title = entry.title if hasattr(entry, 'title') else ""
                 desc = getattr(entry, 'description', getattr(entry, 'summary', ''))
+                link = entry.link
                 content_full = (title + " " + desc).lower()
                 
+                # Фильтр по ключевым словам
                 if any(word in content_full for word in KEYWORDS):
-                    link = entry.link
+                    # Проверка на дубликаты
                     if ignore_history or (link not in SENT_PROJECTS):
                         found.append({
-                            "title": title, "url": link, "site": feed_info["name"],
-                            "price": extract_price(entry), "offer": get_best_template(title)
+                            "title": title, 
+                            "url": link, 
+                            "site": feed_info["name"],
+                            "price": extract_price(entry), 
+                            "offer": get_best_template(title)
                         })
-                        if not ignore_history: SENT_PROJECTS.add(link)
-            time.sleep(2) 
+                        if not ignore_history:
+                            SENT_PROJECTS.add(link)
+                            # Ограничиваем размер истории, чтобы не съедала память
+                            if len(SENT_PROJECTS) > 1000:
+                                list_sent = list(SENT_PROJECTS)
+                                SENT_PROJECTS.clear()
+                                SENT_PROJECTS.update(list_sent[-500:])
+
+            time.sleep(random.uniform(2, 5)) # Случайная пауза между биржами
+            
         except Exception as e: 
             print(f"[FETCH ERROR] {feed_info['name']}: {e}", flush=True)
+            
     return found
 
 def send_to_group(text):
     if LOG_GROUP_ID:
         try: 
             bot.send_message(LOG_GROUP_ID, text, parse_mode="HTML", disable_web_page_preview=True)
-            print(f"[LOG] Сообщение отправлено в группу", flush=True)
         except Exception as e: 
             print(f"[LOG ERROR] {e}", flush=True)
 
@@ -166,15 +187,16 @@ def get_ai_reply(user_text):
 def handle_commands(message):
     try:
         if message.text == '/start':
-            bot.reply_to(message, "Dr. Surf Hunter активен! Я слышу тебя. 🌊")
+            bot.reply_to(message, "Dr. Surf Hunter активен! Я слежу за вакансиями на 5 биржах. 🌊")
         elif message.text == '/check':
-            bot.send_message(message.chat.id, "🔍 Принудительный поиск запущен...")
+            bot.send_message(message.chat.id, "🔍 Сканирую биржи на наличие актуальных AI-проектов...")
             projects = fetch_orders(ignore_history=True)
             if not projects:
-                bot.send_message(message.chat.id, "🌊 Пока новых волн нет.")
-            for p in projects[:3]:
-                msg = f"🎯 <b>{p['site']}</b>\n{clean_html(p['title'])}\n🔗 {p['url']}"
-                bot.send_message(message.chat.id, msg, parse_mode="HTML")
+                bot.send_message(message.chat.id, "🌊 Прямо сейчас новых заказов нет. Я сообщу, как только появятся!")
+            else:
+                for p in projects[:5]: # Показываем 5 последних
+                    msg = f"🎯 <b>{p['site']}</b>\n{clean_html(p['title'])}\n🔗 {p['url']}"
+                    bot.send_message(message.chat.id, msg, parse_mode="HTML")
     except Exception as e:
         print(f"[CMD ERR] {e}", flush=True)
 
@@ -194,29 +216,33 @@ def handle_all_messages(message):
             print(f"[MSG PROC ERR] {e}", flush=True)
 
 def auto_hunter():
-    print("[HUNTER] Цикл запущен", flush=True)
+    print("[HUNTER] Автоматический цикл запущен", flush=True)
     while True:
         try:
             projects = fetch_orders()
+            if projects:
+                print(f"[HUNTER] Найдено новых: {len(projects)}", flush=True)
             for p in projects:
                 msg = (f"💎 <b>НОВЫЙ ЗАКАЗ!</b>\n📍 <b>{p['site']}</b> | {p['price']}\n"
                        f"📝 <i>{clean_html(p['title'])}</i>\n🔗 {p['url']}\n\n"
-                       f"✉️ <b>КЕЙСЫ ДЛЯ ОТКЛИКА:</b>\n{p['offer']}")
+                       f"✉️ <b>ВАРИАНТ ОТКЛИКА:</b>\n{p['offer']}")
                 send_to_group(msg)
-                time.sleep(5)
+                time.sleep(3) # Плавная отправка, чтобы не спамить
         except Exception as e: 
             print(f"[AUTO ERR] {e}", flush=True)
+        
+        # Проверка каждые 10 минут
         time.sleep(600)
 
 if __name__ == "__main__":
-    # 1. Flask для Render (в отдельном потоке)
+    # 1. Flask для Render (анти-сон)
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000, debug=False, use_reloader=False), daemon=True).start()
     
-    # 2. Охотник (в отдельном потоке)
+    # 2. Модуль Охотника (фоновый поиск)
     threading.Thread(target=auto_hunter, daemon=True).start()
     
-    # 3. Основной поток для Telegram (безопасный цикл)
-    print("[SYSTEM] Старт прослушивания сообщений...", flush=True)
+    # 3. Telegram Polling (обработка команд и сообщений)
+    print("[SYSTEM] Бот запущен и готов к работе", flush=True)
     bot.remove_webhook()
     while True:
         try:
