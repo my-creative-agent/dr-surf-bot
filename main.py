@@ -42,11 +42,12 @@ SYSTEM_PROMPT = """
 ПРАВИЛА: Отвечай кратко (1-2 абзаца). Ссылки давай только если просят контакты.
 """
 
+# Теперь в шаблонах всегда два кейса: видео и сам агент
 OFFER_TEMPLATES = {
-    "graphics": "Здравствуйте! Я специализируюсь на генеративной графике и визуальном стиле (Flux, Midjourney). Мои работы: {portfolio_url}. Готова обсудить создание уникального визуала!",
-    "video": "Приветствую! Создаю фотореалистичное ИИ-видео высокого качества (Runway, Kling, Sora). Примеры: {portfolio_url}. Буду рада помочь!",
-    "ai_agent": "Добрый день! Разрабатываю умных ИИ-агентов и персональных Цифровых двойников. Пример: {bot_url}. Давайте обсудим архитектуру вашего проекта!",
-    "general": "Здравствуйте! Я AI-специалист широкого профиля (графика, видео, ИИ-системы). Кейсы: {bot_url}. Готова к сотрудничеству!"
+    "graphics": "Здравствуйте! Специализируюсь на генеративной графике (Flux, Midjourney). \nМои кейсы:\n1. Видео и анимация: {portfolio_url}\n2. Пример AI-агента: {bot_url}\nГотова обсудить ваш проект!",
+    "video": "Приветствую! Создаю фотореалистичное ИИ-видео (Runway, Kling, Sora). \nМои кейсы:\n1. Видео-портфолио: {portfolio_url}\n2. Мой цифровой двойник: {bot_url}\nБуду рада помочь!",
+    "ai_agent": "Добрый день! Разрабатываю умных ИИ-агентов и персональных Цифровых двойников. \nПосмотрите примеры:\n1. Реализованный агент: {bot_url}\n2. Видео-кейсы: {portfolio_url}\nДавайте обсудим архитектуру!",
+    "general": "Здравствуйте! Я AI-специалист (графика, видео, ИИ-системы). \nМои работы:\n- Видео: {portfolio_url}\n- AI-агент: {bot_url}\nГотова к сотрудничеству!"
 }
 
 RSS_FEEDS = [
@@ -66,7 +67,7 @@ SENT_PROJECTS = set()
 
 def clean_html(text):
     if not text: return ""
-    text = re.sub(r'<[^>]+>', '', text) # Удаляем теги
+    text = re.sub(r'<[^>]+>', '', text) 
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 def extract_price(entry):
@@ -77,12 +78,12 @@ def extract_price(entry):
 def get_best_template(title):
     t = title.lower()
     if any(x in t for x in ["видео", "video", "runway", "kling", "sora"]): 
-        return OFFER_TEMPLATES["video"].format(portfolio_url=PORTFOLIO_URL)
+        return OFFER_TEMPLATES["video"].format(portfolio_url=PORTFOLIO_URL, bot_url=MAIN_BOT_URL)
     if any(x in t for x in ["лого", "дизайн", "графика", "иллюстрация", "арт", "рисунок", "banner"]): 
-        return OFFER_TEMPLATES["graphics"].format(portfolio_url=PORTFOLIO_URL)
+        return OFFER_TEMPLATES["graphics"].format(portfolio_url=PORTFOLIO_URL, bot_url=MAIN_BOT_URL)
     if any(x in t for x in ["агент", "бот", "bot", "llama", "chat"]): 
-        return OFFER_TEMPLATES["ai_agent"].format(bot_url=MAIN_BOT_URL)
-    return OFFER_TEMPLATES["general"].format(bot_url=MAIN_BOT_URL)
+        return OFFER_TEMPLATES["ai_agent"].format(portfolio_url=PORTFOLIO_URL, bot_url=MAIN_BOT_URL)
+    return OFFER_TEMPLATES["general"].format(portfolio_url=PORTFOLIO_URL, bot_url=MAIN_BOT_URL)
 
 def fetch_orders(ignore_history=False):
     found = []
@@ -92,11 +93,10 @@ def fetch_orders(ignore_history=False):
             print(f"[FETCH] Опрос {feed_info['name']}...", flush=True)
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0'}
             response = requests.get(feed_info["url"], headers=headers, timeout=20)
-            
             if response.status_code != 200: continue
-
+            
             feed = feedparser.parse(response.content)
-            for entry in feed.entries[:20]:
+            for entry in feed.entries[:25]:
                 title = entry.title if hasattr(entry, 'title') else ""
                 desc = getattr(entry, 'description', getattr(entry, 'summary', ''))
                 content_full = (title + " " + desc).lower()
@@ -120,7 +120,6 @@ def send_to_group(text):
         except Exception as e: 
             print(f"[SEND ERROR] {e}", flush=True)
 
-# --- МОДУЛЬ ДИАЛОГА (AI ДВОЙНИК) ---
 def get_ai_reply(user_text):
     try:
         completion = client.chat.completions.create(
@@ -148,13 +147,11 @@ def handle_commands(message):
 
 @bot.message_handler(func=lambda m: True)
 def handle_all_messages(message):
-    # Если сообщение в личке - отвечаем через AI и шлем отчет в группу
     if message.chat.type == 'private':
         bot.send_chat_action(message.chat.id, 'typing')
         reply = get_ai_reply(message.text)
         bot.reply_to(message, reply)
         
-        # Отчет в группу (тот самый лог диалога)
         report = (f"👤 <b>Сообщение в личку</b> от <code>{message.from_user.id}</code>\n"
                   f"От: {message.from_user.first_name}\n"
                   f"Текст: {message.text}\n\n"
@@ -177,19 +174,18 @@ def auto_hunter():
         time.sleep(600)
 
 if __name__ == "__main__":
-    # Запуск Flask
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 10000))), daemon=True).start()
-    # Запуск Хантера
     threading.Thread(target=auto_hunter, daemon=True).start()
     
     print("[BOT] Запуск системы...", flush=True)
     while True:
         try:
-            bot.stop_polling() # На всякий случай гасим старое
+            bot.stop_polling()
             time.sleep(2)
             bot.delete_webhook(drop_pending_updates=True)
             print("[BOT] Polling стартовал", flush=True)
-            bot.polling(none_stop=True, interval=3, timeout=60, threaded=False)
+            # Убран аргумент threaded, который вызывал ошибку
+            bot.polling(none_stop=True, interval=3, timeout=60)
         except Exception as e:
-            print(f"[RESTART] Ошибка 409 или сеть: {e}", flush=True)
-            time.sleep(20) # Увеличили паузу для сброса сессии
+            print(f"[RESTART] Ошибка или сеть: {e}", flush=True)
+            time.sleep(20)
